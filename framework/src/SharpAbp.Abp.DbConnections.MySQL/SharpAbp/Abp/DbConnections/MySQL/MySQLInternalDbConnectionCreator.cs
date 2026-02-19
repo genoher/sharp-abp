@@ -1,6 +1,6 @@
-﻿using System.Data;
-using MySql.Data.MySqlClient;
+﻿using MySqlConnector;
 using SharpAbp.Abp.Data;
+using System.Data;
 using Volo.Abp.DependencyInjection;
 
 namespace SharpAbp.Abp.DbConnections.MySQL

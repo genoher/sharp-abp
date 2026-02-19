@@ -1,5 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using System;
 using System.Collections.Generic;
@@ -43,8 +43,8 @@ namespace SharpAbp.Abp.Swashbuckle
 
             while (route.Contains(':'))
             {
-                var startIndex = route.IndexOf(":", StringComparison.Ordinal);
-                var endIndex = route.IndexOf("}", startIndex);
+                var startIndex = route.IndexOf(':', StringComparison.Ordinal);
+                var endIndex = route.IndexOf('}', startIndex);
 
                 if (endIndex == -1)
                 {

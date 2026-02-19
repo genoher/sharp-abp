@@ -14,9 +14,9 @@ namespace SharpAbp.Abp.FileStoring.S3
             Check.NotNullOrWhiteSpace(configuration.ServerUrl, nameof(configuration.ServerUrl));
             var clientConfig = new AmazonS3Config()
             {
+                ////SignatureVersion = configuration.SignatureVersion,
                 ServiceURL = configuration.ServerUrl,
-                SignatureVersion = configuration.SignatureVersion,
-                ForcePathStyle = configuration.ForcePathStyle,
+                ForcePathStyle = configuration.ForcePathStyle
             };
             return new AmazonS3Client(configuration.AccessKeyId, configuration.SecretAccessKey, clientConfig);
         }

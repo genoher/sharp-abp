@@ -1,3 +1,10 @@
+﻿using Amazon.S3;
+using Amazon.S3.Model;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
+using Microsoft.Extensions.Options;
+using SharpAbp.Abp.ObjectPool;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -7,13 +14,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Amazon.S3;
-using Amazon.S3.Model;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
-using Microsoft.Extensions.Options;
-using SharpAbp.Abp.ObjectPool;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Timing;
 
@@ -266,7 +266,7 @@ namespace SharpAbp.Abp.FileStoring.S3
                 UseChunkEncoding = configuration.UseChunkEncoding,
             };
             await client.PutObjectAsync(putObjectRequest, args.CancellationToken);
-            Logger.LogInformation("Successfully uploaded single file '{FileId}' to S3. Bucket: {BucketName}, Key: {ObjectKey}", 
+            Logger.LogInformation("Successfully uploaded single file '{FileId}' to S3. Bucket: {BucketName}, Key: {ObjectKey}",
                 args.FileId, containerName, objectKey);
             return args.FileId;
         }
@@ -316,8 +316,8 @@ namespace SharpAbp.Abp.FileStoring.S3
                     PartNumber = i + 1,
                     UseChunkEncoding = configuration.UseChunkEncoding,
                 }, args.CancellationToken);
-                partETags.Add(new PartETag(uploadPartResponse.PartNumber, uploadPartResponse.ETag));
-                Logger.LogDebug("Multipart upload progress for file '{FileId}' with UploadId '{UploadId}': {CompletedParts}/{TotalParts} completed. Bucket: {BucketName}, Key: {ObjectKey}", 
+                partETags.Add(new PartETag(uploadPartResponse.PartNumber!.Value, uploadPartResponse.ETag));
+                Logger.LogDebug("Multipart upload progress for file '{FileId}' with UploadId '{UploadId}': {CompletedParts}/{TotalParts} completed. Bucket: {BucketName}, Key: {ObjectKey}",
                     args.FileId, uploadId, partETags.Count, partCount, containerName, objectKey);
             }
 
@@ -331,7 +331,7 @@ namespace SharpAbp.Abp.FileStoring.S3
             };
 
             var completeMultipartUploadResponse = await client.CompleteMultipartUploadAsync(completeMultipartUploadRequest, args.CancellationToken);
-            Logger.LogInformation("Multipart upload completed for file '{FileId}' with key '{ObjectKey}'. ETag: {ETag}, Bucket: {BucketName}", 
+            Logger.LogInformation("Multipart upload completed for file '{FileId}' with key '{ObjectKey}'. ETag: {ETag}, Bucket: {BucketName}",
                 args.FileId, completeMultipartUploadResponse.Key, completeMultipartUploadResponse.ETag, containerName);
             return args.FileId;
         }

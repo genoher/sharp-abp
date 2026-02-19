@@ -1,9 +1,8 @@
-﻿using System;
-using System.Threading.Tasks;
-using Microsoft.Data.SqlClient;
-using MySql.Data.MySqlClient;
+﻿using Microsoft.Data.SqlClient;
+using MySqlConnector;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace SharpAbp.Abp.DbConnections

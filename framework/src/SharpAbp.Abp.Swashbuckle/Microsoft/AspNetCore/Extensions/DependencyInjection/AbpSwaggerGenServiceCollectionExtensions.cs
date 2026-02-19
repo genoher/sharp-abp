@@ -1,6 +1,6 @@
 ﻿using JetBrains.Annotations;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using SharpAbp.Abp.Swashbuckle;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using Swashbuckle.AspNetCore.SwaggerUI;
@@ -20,14 +20,14 @@ namespace Microsoft.AspNetCore.Extensions.DependencyInjection
             return services.AddSwaggerGen(
                 options =>
                 {
-                    Func<OpenApiSchema> remoteStreamContentSchemaFactory = () => new OpenApiSchema()
+                    static OpenApiSchema remoteStreamContentSchemaFactory() => new()
                     {
-                        Type = "string",
+                        Type = JsonSchemaType.String,
                         Format = "binary"
                     };
 
-                    options.MapType<RemoteStreamContent>(remoteStreamContentSchemaFactory);
-                    options.MapType<IRemoteStreamContent>(remoteStreamContentSchemaFactory);
+                    options.MapType<RemoteStreamContent>((Func<OpenApiSchema>)remoteStreamContentSchemaFactory);
+                    options.MapType<IRemoteStreamContent>((Func<OpenApiSchema>)remoteStreamContentSchemaFactory);
 
                     setupAction?.Invoke(options);
                 });
@@ -63,19 +63,15 @@ namespace Microsoft.AspNetCore.Extensions.DependencyInjection
                             }
                         });
 
-                        options.AddSecurityRequirement(new OpenApiSecurityRequirement
+                        options.AddSecurityRequirement((doc) =>
                         {
-                        {
-                            new OpenApiSecurityScheme
+                            return new OpenApiSecurityRequirement
                             {
-                                Reference = new OpenApiReference
                                 {
-                                    Type = ReferenceType.SecurityScheme,
-                                    Id = "oauth2"
+                                    new OpenApiSecuritySchemeReference("oauth2"),
+                                    new List<string>()
                                 }
-                            },
-                            Array.Empty<string>()
-                        }
+                            };
                         });
 
                         setupAction?.Invoke(options);
@@ -93,7 +89,7 @@ namespace Microsoft.AspNetCore.Extensions.DependencyInjection
             var discoveryUrl = discoveryEndpoint != null ?
                 $"{discoveryEndpoint.TrimEnd('/')}/.well-known/openid-configuration" :
                 $"{authority.TrimEnd('/')}/.well-known/openid-configuration";
-            flows ??= new[] { AbpSwaggerOidcFlows.AuthorizationCode };
+            flows ??= [AbpSwaggerOidcFlows.AuthorizationCode];
 
             services.Configure<SwaggerUIOptions>(swaggerUiOptions =>
             {
@@ -113,20 +109,17 @@ namespace Microsoft.AspNetCore.Extensions.DependencyInjection
                             OpenIdConnectUrl = new Uri(RemoveTenantPlaceholders(discoveryUrl))
                         });
 
-                        options.AddSecurityRequirement(new OpenApiSecurityRequirement
+                        options.AddSecurityRequirement((doc) =>
                         {
-                        {
-                            new OpenApiSecurityScheme
+                            return new OpenApiSecurityRequirement
                             {
-                                Reference = new OpenApiReference
                                 {
-                                    Type = ReferenceType.SecurityScheme,
-                                    Id = "oidc"
+                                    new OpenApiSecuritySchemeReference("oidc"),
+                                    new List<string>()
                                 }
-                            },
-                            Array.Empty<string>()
-                        }
+                            };
                         });
+
                         setupAction?.Invoke(options);
                     });
         }
