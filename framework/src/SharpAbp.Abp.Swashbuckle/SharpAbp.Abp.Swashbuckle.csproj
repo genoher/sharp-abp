@@ -5,6 +5,8 @@
 
 	<PropertyGroup>
 		<TargetFramework>$(NetCoreFx)</TargetFramework>
+		<Nullable>enable</Nullable>
+		<WarningsAsErrors>Nullable</WarningsAsErrors>
 		<AssemblyName>SharpAbp.Abp.Swashbuckle</AssemblyName>
 		<PackageId>SharpAbp.Abp.Swashbuckle</PackageId>
 		<AssetTargetFallback>$(AssetTargetFallback);portable-net45+win8+wp8+wpa81;</AssetTargetFallback>
@@ -16,13 +18,17 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Volo.Abp.Swashbuckle"/>
+		<PackageReference Include="Volo.Abp.Swashbuckle" />
+		<PackageReference Include="Volo.Abp.AspNetCore.Mvc" />
+		<PackageReference Include="Volo.Abp.VirtualFileSystem" />
 		<PackageReference Include="Swashbuckle.AspNetCore" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Remove="wwwroot\swagger\ui\swagger_theme.css" />
-		<EmbeddedResource Include="wwwroot\swagger\ui\swagger_theme.css" />
+		<None Remove="wwwroot\swagger\ui\abp.swagger.js" />
+		<EmbeddedResource Include="wwwroot\swagger\ui\abp.swagger.js" />
+		<None Remove="wwwroot\swagger\ui\abp.js" />
+		<EmbeddedResource Include="wwwroot\swagger\ui\abp.js" />
 	</ItemGroup>
 
 </Project>

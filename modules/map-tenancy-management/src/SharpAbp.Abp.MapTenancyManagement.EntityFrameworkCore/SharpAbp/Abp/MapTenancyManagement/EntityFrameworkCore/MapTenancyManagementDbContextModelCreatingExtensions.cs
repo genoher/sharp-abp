@@ -2,6 +2,7 @@
 using System;
 using Volo.Abp;
 using Volo.Abp.EntityFrameworkCore.Modeling;
+using Volo.Abp.TenantManagement;
 
 namespace SharpAbp.Abp.MapTenancyManagement.EntityFrameworkCore
 {
@@ -26,13 +27,20 @@ namespace SharpAbp.Abp.MapTenancyManagement.EntityFrameworkCore
 
                 b.ConfigureByConvention();
 
+                b.Property(p => p.TenantName).HasMaxLength(TenantConsts.MaxNameLength);
+
                 b.Property(p => p.Code).IsRequired().HasMaxLength(MapTenantConsts.MaxCodeLength);
 
                 b.Property(p => p.MapCode).IsRequired().HasMaxLength(MapTenantConsts.MaxMapCodeLength);
 
                 b.HasIndex(p => new { p.Code }).IsUnique();
+
                 b.HasIndex(p => new { p.MapCode }).IsUnique();
+
+                b.ApplyObjectExtensionMappings();
             });
+
+            builder.TryConfigureObjectExtensions<MapTenancyManagementDbContext>();
         }
     }
 }

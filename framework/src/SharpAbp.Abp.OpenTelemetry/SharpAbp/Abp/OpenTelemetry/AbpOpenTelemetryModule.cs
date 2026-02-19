@@ -58,7 +58,7 @@ namespace SharpAbp.Abp.OpenTelemetry
             {
                 foreach (var keyValuePair in openTelemetryOptions.TracingExporters)
                 {
-                    if (openTelemetryOptions.UseTracingExporter.Equals(keyValuePair.Key, StringComparison.OrdinalIgnoreCase))
+                    if (openTelemetryOptions.UseTracingExporter!.Equals(keyValuePair.Key, StringComparison.OrdinalIgnoreCase))
                     {
                         PreConfigure<AbpOpenTelemetryOptions>(options =>
                         {
@@ -73,7 +73,7 @@ namespace SharpAbp.Abp.OpenTelemetry
             {
                 foreach (var keyValuePair in openTelemetryOptions.MetricsExporters)
                 {
-                    if (openTelemetryOptions.UseMetricsExporter.Equals(keyValuePair.Key, StringComparison.OrdinalIgnoreCase))
+                    if (openTelemetryOptions.UseMetricsExporter!.Equals(keyValuePair.Key, StringComparison.OrdinalIgnoreCase))
                     {
                         PreConfigure<AbpOpenTelemetryOptions>(options =>
                         {
@@ -88,7 +88,7 @@ namespace SharpAbp.Abp.OpenTelemetry
             {
                 foreach (var keyValuePair in openTelemetryOptions.LoggingExporters)
                 {
-                    if (openTelemetryOptions.UseLoggingExporter.Equals(keyValuePair.Key, StringComparison.OrdinalIgnoreCase))
+                    if (openTelemetryOptions.UseLoggingExporter!.Equals(keyValuePair.Key, StringComparison.OrdinalIgnoreCase))
                     {
                         PreConfigure<AbpOpenTelemetryOptions>(options =>
                         {
@@ -124,7 +124,7 @@ namespace SharpAbp.Abp.OpenTelemetry
             if (openTelemetryBuilderOptions.IsEnabled)
             {
                 void configureResource(ResourceBuilder r) => r.AddService(
-                    openTelemetryBuilderOptions.ServiceName,
+                    openTelemetryBuilderOptions.ServiceName!,
                     openTelemetryBuilderOptions.ServiceVersion,
                     openTelemetryBuilderOptions.ServiceVersion,
                     openTelemetryBuilderOptions.AutoGenerateServiceInstanceId,
@@ -146,7 +146,7 @@ namespace SharpAbp.Abp.OpenTelemetry
                         var sourceNames = openTelemetryOptions.SourceNames.ToArray();
                         if (sourceNames.Length == 0)
                         {
-                            sourceNames = new string[] { "SharpAbp" };
+                            sourceNames = ["SharpAbp"];
                         }
                         //addSource
                         builder.AddSource(sourceNames);
@@ -185,7 +185,7 @@ namespace SharpAbp.Abp.OpenTelemetry
                         var meterNames = openTelemetryOptions.MeterNames.ToArray();
                         if (meterNames.Length == 0)
                         {
-                            meterNames = new string[] { "SharpAbp" };
+                            meterNames = ["SharpAbp"];
                         }
 
                         //addMeter

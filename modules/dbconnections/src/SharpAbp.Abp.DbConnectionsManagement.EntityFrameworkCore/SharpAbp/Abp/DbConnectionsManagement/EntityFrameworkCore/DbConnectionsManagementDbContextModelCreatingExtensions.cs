@@ -33,7 +33,11 @@ namespace SharpAbp.Abp.DbConnectionsManagement.EntityFrameworkCore
                 b.Property(p => p.ConnectionString).HasMaxLength(DatabaseConnectionInfoConsts.MaxConnectionStringLength);
 
                 b.HasIndex(p => new { p.Name }).IsUnique();
+
+                b.ApplyObjectExtensionMappings();
             });
+
+            builder.TryConfigureObjectExtensions<DbConnectionsManagementDbContext>();
         }
     }
 }

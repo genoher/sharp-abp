@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Identity;
@@ -10,21 +10,14 @@ namespace SharpAbp.Abp.Identity
 {
     [RemoteService(Name = IdentityRemoteServiceConsts.RemoteServiceName)]
     [Area("identity")]
-    [ControllerName("User")]
     [Route("api/identity/users")]
     public class IdentityUserController : IdentityController, IIdentityUserAppService
     {
         private readonly IIdentityUserAppService _identityUserAppService;
-        private readonly Volo.Abp.Identity.IIdentityUserAppService _userAppService;
-        public IdentityUserController(
-            IIdentityUserAppService identityUserAppService,
-            Volo.Abp.Identity.IIdentityUserAppService userAppService)
+        public IdentityUserController(IIdentityUserAppService identityUserAppService)
         {
             _identityUserAppService = identityUserAppService;
-            _userAppService = userAppService;
         }
-
-
 
         /// <summary>
         /// Get by id
@@ -48,6 +41,18 @@ namespace SharpAbp.Abp.Identity
         public async Task<IdentityUserDto> FindByEmailAsync(string email)
         {
             return await _identityUserAppService.FindByEmailAsync(email);
+        }
+
+        /// <summary>
+        /// 根据id列表获取用户
+        /// </summary>
+        /// <param name="ids"></param>
+        /// <returns></returns>
+        [HttpGet]
+        [Route("get-list-by-ids")]
+        public async Task<List<IdentityUserDto>> GetListByIdsAsync(List<Guid> ids)
+        {
+            return await _identityUserAppService.GetListByIdsAsync(ids);
         }
 
         /// <summary>
@@ -268,7 +273,6 @@ namespace SharpAbp.Abp.Identity
         {
             await _identityUserAppService.SetTwoFactorAsync(id, enabled);
         }
-
 
     }
 }

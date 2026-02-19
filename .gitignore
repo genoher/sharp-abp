@@ -37,11 +37,15 @@ logs/
 # vscode
 .vscode/
 
+.claude/
+
 # nuget包
 nupkgs/
 
 # tools
 tools/
+
+*.secrets.json
 
 # Visual Studio 2017 auto generated files
 Generated\ Files/
@@ -98,6 +102,8 @@ StyleCopReport.xml
 *.pidb
 *.svclog
 *.scc
+
+*.secrets.json
 
 # Chutzpah Test files
 _Chutzpah*

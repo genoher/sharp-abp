@@ -12,14 +12,12 @@ namespace SharpAbp.Abp.FileStoring.S3
             Check.NotNullOrWhiteSpace(configuration.AccessKeyId, nameof(configuration.AccessKeyId));
             Check.NotNullOrWhiteSpace(configuration.SecretAccessKey, nameof(configuration.SecretAccessKey));
             Check.NotNullOrWhiteSpace(configuration.ServerUrl, nameof(configuration.ServerUrl));
-
             var clientConfig = new AmazonS3Config()
             {
                 ServiceURL = configuration.ServerUrl,
                 SignatureVersion = configuration.SignatureVersion,
                 ForcePathStyle = configuration.ForcePathStyle,
             };
-
             return new AmazonS3Client(configuration.AccessKeyId, configuration.SecretAccessKey, clientConfig);
         }
     }

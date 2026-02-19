@@ -23,12 +23,12 @@ namespace SharpAbp.Abp.OpenTelemetry
         /// <summary>
         /// Tracing LegacySource operationName
         /// </summary>
-        public string OperationName { get; set; }
+        public string? OperationName { get; set; }
 
         /// <summary>
         ///  Tracing sampler
         /// </summary>
-        public Action<TracerProviderBuilder> SamplerConfigure { get; set; }
+        public Action<TracerProviderBuilder>? SamplerConfigure { get; set; }
 
         /// <summary>
         /// Tracing Instrumentation
@@ -38,12 +38,12 @@ namespace SharpAbp.Abp.OpenTelemetry
         /// <summary>
         /// Tracing exporter name
         /// </summary>
-        public string UseTracingExporter { get; set; }
+        public string? UseTracingExporter { get; set; }
 
         /// <summary>
         /// Tracing exporter
         /// </summary>
-        public Action<TracerProviderBuilder> TracingExporter { get; set; }
+        public Action<TracerProviderBuilder>? TracingExporter { get; set; }
 
         /// <summary>
         /// Tracing Configures
@@ -68,12 +68,12 @@ namespace SharpAbp.Abp.OpenTelemetry
         /// <summary>
         /// ExemplarFilter
         /// </summary>
-        public Action<MeterProviderBuilder> ExemplarFilterConfigure { get; set; }
+        public Action<MeterProviderBuilder>? ExemplarFilterConfigure { get; set; }
 
         /// <summary>
         /// Metrics exporter name
         /// </summary>
-        public string UseMetricsExporter { get; set; }
+        public string? UseMetricsExporter { get; set; }
 
         /// <summary>
         /// Metrics views
@@ -83,7 +83,7 @@ namespace SharpAbp.Abp.OpenTelemetry
         /// <summary>
         /// Metrics exporter
         /// </summary>
-        public Action<MeterProviderBuilder> MetricsExporter { get; set; }
+        public Action<MeterProviderBuilder>? MetricsExporter { get; set; }
 
         /// <summary>
         ///  Metrics configures
@@ -98,38 +98,38 @@ namespace SharpAbp.Abp.OpenTelemetry
         /// <summary>
         /// Logging exporter
         /// </summary>
-        public string UseLoggingExporter { get; set; }
+        public string? UseLoggingExporter { get; set; }
 
         /// <summary>
         /// Logging exporter
         /// </summary>
-        public Action<OpenTelemetryLoggerOptions> LoggingExporter { get; set; }
+        public Action<OpenTelemetryLoggerOptions>? LoggingExporter { get; set; }
 
         public Dictionary<string, Action<TracerProviderBuilder>> TracingExporters { get; set; }
         public Dictionary<string, Action<MeterProviderBuilder>> MetricsExporters { get; set; }
         public Dictionary<string, Action<OpenTelemetryLoggerOptions>> LoggingExporters { get; set; }
 
-        public List<Action<OpenTelemetryBuilder>> OpenTelemetryBuilderPreConfigures { get; set; }
-        public List<Action<OpenTelemetryBuilder>> OpenTelemetryBuilderPostConfigures { get; set; }
+        public List<Action<IOpenTelemetryBuilder>> OpenTelemetryBuilderPreConfigures { get; set; }
+        public List<Action<IOpenTelemetryBuilder>> OpenTelemetryBuilderPostConfigures { get; set; }
 
         public AbpOpenTelemetryOptions()
         {
-            SourceNames = new List<string>();
-            TracingInstrumentationConfigures = new List<Action<TracerProviderBuilder>>();
-            TracingConfigures = new List<Action<TracerProviderBuilder>>();
+            SourceNames = [];
+            TracingInstrumentationConfigures = [];
+            TracingConfigures = [];
 
-            MeterNames = new List<string>();
-            MetricsInstrumentationConfigures = new List<Action<MeterProviderBuilder>>();
-            MetricsViewConfigures = new List<Action<MeterProviderBuilder>>();
-            MetricsConfigures = new List<Action<MeterProviderBuilder>>();
+            MeterNames = [];
+            MetricsInstrumentationConfigures = [];
+            MetricsViewConfigures = [];
+            MetricsConfigures = [];
 
-            OpenTelemetryBuilderPreConfigures = new List<Action<OpenTelemetryBuilder>>();
-            OpenTelemetryBuilderPostConfigures = new List<Action<OpenTelemetryBuilder>>();
+            OpenTelemetryBuilderPreConfigures = [];
+            OpenTelemetryBuilderPostConfigures = [];
 
 
-            TracingExporters = new Dictionary<string, Action<TracerProviderBuilder>>();
-            MetricsExporters = new Dictionary<string, Action<MeterProviderBuilder>>();
-            LoggingExporters = new Dictionary<string, Action<OpenTelemetryLoggerOptions>>();
+            TracingExporters = [];
+            MetricsExporters = [];
+            LoggingExporters = [];
         }
 
 

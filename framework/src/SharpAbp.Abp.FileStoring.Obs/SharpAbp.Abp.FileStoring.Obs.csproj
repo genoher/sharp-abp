@@ -5,6 +5,8 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>$(ProjectFrameworks)</TargetFrameworks>
+		<Nullable>enable</Nullable>
+		<WarningsAsErrors>Nullable</WarningsAsErrors>
 		<AssemblyName>SharpAbp.Abp.FileStoring.Obs</AssemblyName>
 		<PackageId>SharpAbp.Abp.FileStoring.Obs</PackageId>
 		<AssetTargetFallback>$(AssetTargetFallback);portable-net45+win8+wp8+wpa81;</AssetTargetFallback>
@@ -17,11 +19,12 @@
 
 	<ItemGroup>
 		<PackageReference Include="HuaweiCloud.OBS.SDK" />
-		<PackageReference Include="Volo.Abp.Timing"  />
+		<PackageReference Include="Volo.Abp.Timing" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\SharpAbp.Abp.FileStoring\SharpAbp.Abp.FileStoring.csproj" />
+		<ProjectReference Include="..\SharpAbp.Abp.ObjectPool\SharpAbp.Abp.ObjectPool.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

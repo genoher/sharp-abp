@@ -1,8 +1,8 @@
-﻿using JetBrains.Annotations;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
+using JetBrains.Annotations;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.DependencyInjection;
 
@@ -49,7 +49,7 @@ namespace SharpAbp.Abp.DotCommon.Performance
 
                         if (!_performanceServiceDict.TryAdd(name, performanceService))
                         {
-                            Logger.LogInformation("Add performanceService '{0}' to dict failed.", name);
+                            Logger.LogInformation("Failed to add performance service '{PerformanceServiceName}' to dictionary.", name);
                         }
                         else
                         {
@@ -61,7 +61,7 @@ namespace SharpAbp.Abp.DotCommon.Performance
 
             if (performanceService == null)
             {
-                throw new AbpException($"Could not find performanceService by name '{name}'.");
+                throw new AbpException($"Could not find performance service with the name '{name}'. Please check if the configuration exists and is properly formatted.");
             }
 
             return performanceService;

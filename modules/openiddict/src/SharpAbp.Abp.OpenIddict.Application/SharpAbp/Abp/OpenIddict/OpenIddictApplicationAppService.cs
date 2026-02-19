@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Localization;
 using OpenIddict.Abstractions;
 using System;
@@ -17,16 +17,55 @@ using Volo.Abp.PermissionManagement;
 
 namespace SharpAbp.Abp.OpenIddict
 {
+    /// <summary>
+    /// Application service for managing OpenIddict applications
+    /// </summary>
     [Authorize(OpenIddictPermissions.Applications.Default)]
     public class OpenIddictApplicationAppService : OpenIddictAppServiceBase, IOpenIddictApplicationAppService
     {
+        /// <summary>
+        /// Gets the OpenIddict application store resolver
+        /// </summary>
         protected IOpenIddictApplicationStoreResolver Resolver { get; }
+        
+        /// <summary>
+        /// Gets the ABP OpenId application store
+        /// </summary>
         protected IAbpOpenIdApplicationStore OpenIdApplicationStore { get; }
+        
+        /// <summary>
+        /// Gets the ABP application manager
+        /// </summary>
         protected IAbpApplicationManager ApplicationManager { get; }
+        
+        /// <summary>
+        /// Gets the permission data seeder
+        /// </summary>
         protected IPermissionDataSeeder PermissionDataSeeder { get; }
+        
+        /// <summary>
+        /// Gets the permission manager
+        /// </summary>
         protected IPermissionManager PermissionManager { get; }
+        
+        /// <summary>
+        /// Gets the OpenIddict application repository
+        /// </summary>
         protected IOpenIddictApplicationRepository OpenIdApplicationRepository { get; }
+        
+        /// <summary>
+        /// Gets the string localizer for OpenIddict responses
+        /// </summary>
         protected IStringLocalizer<OpenIddictResponse> LL { get; }
+        /// <summary>
+        /// Initializes a new instance of the OpenIddictApplicationAppService class
+        /// </summary>
+        /// <param name="resolver">The OpenIddict application store resolver</param>
+        /// <param name="applicationManager">The ABP application manager</param>
+        /// <param name="permissionDataSeeder">The permission data seeder</param>
+        /// <param name="permissionManager">The permission manager</param>
+        /// <param name="openIddictApplicationRepository">The OpenIddict application repository</param>
+        /// <param name="ll">The string localizer for OpenIddict responses</param>
         public OpenIddictApplicationAppService(
             IOpenIddictApplicationStoreResolver resolver,
             IAbpApplicationManager applicationManager,
@@ -44,6 +83,11 @@ namespace SharpAbp.Abp.OpenIddict
             LL = ll;
         }
 
+        /// <summary>
+        /// Gets an OpenIddict application by its unique identifier
+        /// </summary>
+        /// <param name="id">The unique identifier of the application</param>
+        /// <returns>The OpenIddict application DTO</returns>
         [Authorize(OpenIddictPermissions.Applications.Default)]
         public virtual async Task<OpenIddictApplicationDto> GetAsync(Guid id)
         {
@@ -51,6 +95,11 @@ namespace SharpAbp.Abp.OpenIddict
             return await ToApplicationDtoAsync(application.ToModel());
         }
 
+        /// <summary>
+        /// Finds an OpenIddict application by its client identifier
+        /// </summary>
+        /// <param name="clientId">The client identifier of the application</param>
+        /// <returns>The OpenIddict application DTO</returns>
         [Authorize(OpenIddictPermissions.Applications.Default)]
         public virtual async Task<OpenIddictApplicationDto> FindByClientIdAsync(string clientId)
         {
@@ -59,6 +108,11 @@ namespace SharpAbp.Abp.OpenIddict
             return await ToApplicationDtoAsync(application.ToModel());
         }
 
+        /// <summary>
+        /// Gets a paged list of OpenIddict applications
+        /// </summary>
+        /// <param name="input">The paged request parameters</param>
+        /// <returns>A paged result containing OpenIddict application DTOs</returns>
         [Authorize(OpenIddictPermissions.Applications.Default)]
         public virtual async Task<PagedResultDto<OpenIddictApplicationDto>> GetPagedListAsync(OpenIddictApplicationPagedRequestDto input)
         {
@@ -72,6 +126,10 @@ namespace SharpAbp.Abp.OpenIddict
             return new PagedResultDto<OpenIddictApplicationDto>(count, applicationDtos);
         }
 
+        /// <summary>
+        /// Gets all OpenIddict applications
+        /// </summary>
+        /// <returns>A list of OpenIddict application DTOs</returns>
         [Authorize(OpenIddictPermissions.Applications.Default)]
         public virtual async Task<List<OpenIddictApplicationDto>> GetListAsync()
         {
@@ -84,15 +142,20 @@ namespace SharpAbp.Abp.OpenIddict
             return applicationDtos;
         }
 
+        /// <summary>
+        /// Creates a new OpenIddict application
+        /// </summary>
+        /// <param name="input">The application creation data</param>
+        /// <returns>The created OpenIddict application DTO</returns>
         [Authorize(OpenIddictPermissions.Applications.Create)]
         public virtual async Task<OpenIddictApplicationDto> CreateAsync(CreateOrUpdateOpenIddictApplicationDto input)
         {
-            if (!string.IsNullOrEmpty(input.ClientSecret) && string.Equals(input.Type, OpenIddictConstants.ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(input.ClientSecret) && string.Equals(input.ClientType, OpenIddictConstants.ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
             {
                 throw new BusinessException(LL["NoClientSecretCanBeSetForPublicApplications"]);
             }
 
-            if (string.IsNullOrEmpty(input.ClientSecret) && string.Equals(input.Type, OpenIddictConstants.ClientTypes.Confidential, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(input.ClientSecret) && string.Equals(input.ClientType, OpenIddictConstants.ClientTypes.Confidential, StringComparison.OrdinalIgnoreCase))
             {
                 throw new BusinessException(LL["TheClientSecretIsRequiredForConfidentialApplications"]);
             }
@@ -118,10 +181,16 @@ namespace SharpAbp.Abp.OpenIddict
             return await ToApplicationDtoAsync(created.As<OpenIddictApplicationModel>());
         }
 
+        /// <summary>
+        /// Updates an existing OpenIddict application
+        /// </summary>
+        /// <param name="id">The unique identifier of the application to update</param>
+        /// <param name="input">The application update data</param>
+        /// <returns>The updated OpenIddict application DTO</returns>
         [Authorize(OpenIddictPermissions.Applications.Update)]
         public virtual async Task<OpenIddictApplicationDto> UpdateAsync(Guid id, CreateOrUpdateOpenIddictApplicationDto input)
         {
-            if (!string.IsNullOrEmpty(input.ClientSecret) && string.Equals(input.Type, OpenIddictConstants.ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(input.ClientSecret) && string.Equals(input.ClientType, OpenIddictConstants.ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
             {
                 throw new BusinessException(LL["NoClientSecretCanBeSetForPublicApplications"]);
             }
@@ -162,18 +231,28 @@ namespace SharpAbp.Abp.OpenIddict
             return await ToApplicationDtoAsync(updated);
         }
 
+        /// <summary>
+        /// Deletes an OpenIddict application
+        /// </summary>
+        /// <param name="id">The unique identifier of the application to delete</param>
+        /// <returns>A task representing the asynchronous operation</returns>
         [Authorize(OpenIddictPermissions.Applications.Delete)]
         public virtual async Task DeleteAsync(Guid id)
         {
             await OpenIdApplicationRepository.DeleteAsync(id);
         }
 
+        /// <summary>
+        /// Builds an OpenIddict application model from the input data
+        /// </summary>
+        /// <param name="input">The application input data</param>
+        /// <returns>The built OpenIddict application model</returns>
         protected virtual async Task<OpenIddictApplicationModel> BuildModel(CreateOrUpdateOpenIddictApplicationDto input)
         {
             var model = new OpenIddictApplicationModel()
             {
                 ClientId = input.ClientId,
-                Type = input.Type,
+                ClientType = input.ClientType,
                 ClientSecret = input.ClientSecret,
                 ConsentType = input.ConsentType,
                 DisplayName = input.DisplayName,
@@ -217,7 +296,7 @@ namespace SharpAbp.Abp.OpenIddict
             {
                 permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.CodeIdToken);
 
-                if (string.Equals(input.Type, OpenIddictConstants.ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(input.ClientType, OpenIddictConstants.ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
                 {
                     permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.CodeIdTokenToken);
                     permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.CodeToken);
@@ -226,7 +305,7 @@ namespace SharpAbp.Abp.OpenIddict
 
             if (!firstRedirectUri.IsNullOrWhiteSpace() || !firstPostLogoutRedirectUri.IsNullOrWhiteSpace())
             {
-                permissions.Add(OpenIddictConstants.Permissions.Endpoints.Logout);
+                permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
             }
 
             foreach (var grantType in input.GrantTypes)
@@ -276,13 +355,13 @@ namespace SharpAbp.Abp.OpenIddict
                 if (grantType == OpenIddictConstants.GrantTypes.DeviceCode)
                 {
                     permissions.Add(OpenIddictConstants.Permissions.GrantTypes.DeviceCode);
-                    permissions.Add(OpenIddictConstants.Permissions.Endpoints.Device);
+                    permissions.Add(OpenIddictConstants.Permissions.Endpoints.DeviceAuthorization);
                 }
 
                 if (grantType == OpenIddictConstants.GrantTypes.Implicit)
                 {
                     permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.IdToken);
-                    if (string.Equals(input.Type, OpenIddictConstants.ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(input.ClientType, OpenIddictConstants.ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
                     {
                         permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.IdTokenToken);
                         permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Token);
@@ -308,6 +387,11 @@ namespace SharpAbp.Abp.OpenIddict
             return model;
         }
 
+        /// <summary>
+        /// Converts an OpenIddict application model to a DTO
+        /// </summary>
+        /// <param name="model">The OpenIddict application model</param>
+        /// <returns>The OpenIddict application DTO</returns>
         protected virtual async Task<OpenIddictApplicationDto> ToApplicationDtoAsync(OpenIddictApplicationModel model)
         {
 
@@ -318,11 +402,10 @@ namespace SharpAbp.Abp.OpenIddict
                 ClientSecret = model.ClientSecret,
                 ConsentType = model.ConsentType,
                 DisplayName = model.DisplayName,
-                Type = model.Type,
+                ClientType = model.ClientType,
                 ClientUri = model.ClientUri,
                 LogoUri = model.LogoUri,
             };
-
 
             foreach (var extraProperty in model.ExtraProperties)
             {
@@ -362,6 +445,10 @@ namespace SharpAbp.Abp.OpenIddict
             return dto;
         }
 
+        /// <summary>
+        /// Gets all available grant types
+        /// </summary>
+        /// <returns>A list of all available grant types</returns>
         protected virtual List<string> GetAllGrantTypes()
         {
             var grantTypes = new List<string>()
@@ -377,6 +464,10 @@ namespace SharpAbp.Abp.OpenIddict
             return grantTypes;
         }
 
+        /// <summary>
+        /// Gets all available scopes
+        /// </summary>
+        /// <returns>A list of all available scopes</returns>
         protected virtual List<string> GetAllScopes()
         {
             var scopes = new List<string>()

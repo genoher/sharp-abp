@@ -1,75 +1,108 @@
-﻿using Microsoft.Extensions.Logging;
-using OBS;
-using OBS.Model;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
+using Microsoft.Extensions.Options;
+using OBS;
+using OBS.Model;
+using SharpAbp.Abp.ObjectPool;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Timing;
 
 namespace SharpAbp.Abp.FileStoring.Obs
 {
+    [ExposeKeyedService<IFileProvider>(ObsFileProviderConfigurationNames.ProviderName)]
     public class ObsFileProvider : FileProviderBase, ITransientDependency
     {
         protected ILogger Logger { get; }
+        protected IServiceProvider ServiceProvider { get; }
+        protected AbpFileStoringAbstractionsOptions Options { get; }
         protected IClock Clock { get; }
-        protected IObsClientFactory ObsClientFactory { get; }
+        protected IPoolOrchestrator PoolOrchestrator { get; }
         protected IObsFileNameCalculator ObsFileNameCalculator { get; }
         protected IFileNormalizeNamingService FileNormalizeNamingService { get; }
 
         public ObsFileProvider(
             ILogger<ObsFileProvider> logger,
+            IServiceProvider serviceProvider,
+            IOptions<AbpFileStoringAbstractionsOptions> options,
             IClock clock,
-            IObsClientFactory obsClientFactory,
+            IPoolOrchestrator poolOrchestrator,
             IObsFileNameCalculator obsFileNameCalculator,
             IFileNormalizeNamingService fileNormalizeNamingService)
         {
             Logger = logger;
+            ServiceProvider = serviceProvider;
+            Options = options.Value;
+
             Clock = clock;
-            ObsClientFactory = obsClientFactory;
+            PoolOrchestrator = poolOrchestrator;
             ObsFileNameCalculator = obsFileNameCalculator;
             FileNormalizeNamingService = fileNormalizeNamingService;
         }
 
         public override string Provider => ObsFileProviderConfigurationNames.ProviderName;
 
-        protected virtual ObsClient GetObsClient(FileContainerConfiguration fileContainerConfiguration)
+
+        protected virtual ObjectPool<ObsClient> GetObsClientPool(ObsFileProviderConfiguration obsConfiguration)
         {
-            var obsConfiguration = fileContainerConfiguration.GetObsConfiguration();
-            return ObsClientFactory.Create(obsConfiguration);
+            var poolName = NormalizePoolName(obsConfiguration);
+            var obsClientPolicy = ActivatorUtilities.CreateInstance<ObsClientPolicy>(ServiceProvider, obsConfiguration);
+            var pool = PoolOrchestrator.GetPool(poolName, obsClientPolicy, Options.DefaultClientMaximumRetained);
+            return pool;
         }
 
-        protected virtual ObsClient GetObsClient(ObsFileProviderConfiguration obsConfiguration)
+        protected virtual string NormalizePoolName(ObsFileProviderConfiguration obsConfiguration)
         {
-            return ObsClientFactory.Create(obsConfiguration);
+            var v = $"{obsConfiguration.Endpoint}-{obsConfiguration.AccessKeyId}-{obsConfiguration.AccessKeySecret}";
+            using var sha1 = SHA1.Create();
+            var hashBuffer = sha1.ComputeHash(Encoding.UTF8.GetBytes(v));
+            var hash = hashBuffer.Aggregate("", (current, b) => current + b.ToString("X2"));
+            return $"FileStoring-{ObsFileProviderConfigurationNames.ProviderName}-{hash}";
         }
+
 
         public override async Task<string> SaveAsync(FileProviderSaveArgs args)
         {
             var containerName = GetContainerName(args);
             var objectKey = ObsFileNameCalculator.Calculate(args);
+
             var obsConfiguration = args.Configuration.GetObsConfiguration();
-            var obsClient = GetObsClient(obsConfiguration);
-            if (!args.OverrideExisting && FileExistsAsync(obsClient, containerName, objectKey))
+            var pool = GetObsClientPool(obsConfiguration);
+            var obsClient = pool.Get();
+
+            try
             {
-                throw new FileAlreadyExistsException($"Saving FILE '{args.FileId}' does already exists in the container '{containerName}'! Set {nameof(args.OverrideExisting)} if it should be overwritten.");
-            }
-            if (obsConfiguration.CreateContainerIfNotExists)
-            {
-                if (!obsClient.HeadBucket(new HeadBucketRequest() { BucketName = containerName }))
+                if (!args.OverrideExisting && FileExistsAsync(obsClient, containerName, objectKey))
                 {
-                    obsClient.CreateBucket(new CreateBucketRequest() { BucketName = containerName });
+                    throw new FileAlreadyExistsException($"Saving FILE '{args.FileId}' does already exists in the container '{containerName}'! Set {nameof(args.OverrideExisting)} if it should be overwritten.");
+                }
+                if (obsConfiguration.CreateContainerIfNotExists)
+                {
+                    if (!obsClient.HeadBucket(new HeadBucketRequest() { BucketName = containerName }))
+                    {
+                        obsClient.CreateBucket(new CreateBucketRequest() { BucketName = containerName });
+                    }
+                }
+
+                if (args.Configuration.EnableAutoMultiPartUpload && args.FileStream!.Length > args.Configuration.MultiPartUploadMinFileSize)
+                {
+                    return await MultiPartUploadAsync(obsClient, containerName, objectKey, args);
+                }
+                else
+                {
+                    return await PutObjectAsync(obsClient, containerName, objectKey, args);
                 }
             }
-
-            if (args.Configuration.EnableAutoMultiPartUpload && args.FileStream.Length > args.Configuration.MultiPartUploadMinFileSize)
+            finally
             {
-                return await MultiPartUploadAsync(obsClient, containerName, objectKey, args);
-            }
-            else
-            {
-                return await PutObjectAsync(obsClient, containerName, objectKey, args);
+                pool.Return(obsClient);
             }
         }
 
@@ -77,39 +110,73 @@ namespace SharpAbp.Abp.FileStoring.Obs
         {
             var containerName = GetContainerName(args);
             var objectKey = ObsFileNameCalculator.Calculate(args);
-            var obsClient = GetObsClient(args.Configuration);
-            if (!FileExistsAsync(obsClient, containerName, objectKey))
+
+            var obsConfiguration = args.Configuration.GetObsConfiguration();
+            var pool = GetObsClientPool(obsConfiguration);
+            var obsClient = pool.Get();
+            try
             {
-                return Task.FromResult(false);
+
+                if (!FileExistsAsync(obsClient, containerName, objectKey))
+                {
+                    return Task.FromResult(false);
+                }
+                obsClient.DeleteObject(new DeleteObjectRequest()
+                {
+                    BucketName = containerName,
+                    ObjectKey = objectKey
+                });
+                return Task.FromResult(true);
             }
-            obsClient.DeleteObject(new DeleteObjectRequest()
+            finally
             {
-                BucketName = containerName,
-                ObjectKey = objectKey
-            });
-            return Task.FromResult(true);
+                pool.Return(obsClient);
+            }
         }
 
         public override Task<bool> ExistsAsync(FileProviderExistsArgs args)
         {
             var containerName = GetContainerName(args);
             var objectKey = ObsFileNameCalculator.Calculate(args);
-            var obsClient = GetObsClient(args.Configuration);
-            return Task.FromResult(FileExistsAsync(obsClient, containerName, objectKey));
+
+            var obsConfiguration = args.Configuration.GetObsConfiguration();
+            var pool = GetObsClientPool(obsConfiguration);
+            var obsClient = pool.Get();
+
+            try
+            {
+
+                return Task.FromResult(FileExistsAsync(obsClient, containerName, objectKey));
+            }
+            finally
+            {
+                pool.Return(obsClient);
+            }
         }
 
-        public override async Task<Stream> GetOrNullAsync(FileProviderGetArgs args)
+        public override async Task<Stream?> GetOrNullAsync(FileProviderGetArgs args)
         {
             var containerName = GetContainerName(args);
             var objectKey = ObsFileNameCalculator.Calculate(args);
-            var obsClient = GetObsClient(args.Configuration);
-            if (!FileExistsAsync(obsClient, containerName, objectKey))
-            {
-                return null;
-            }
-            var result = obsClient.GetObject(new GetObjectRequest() { BucketName = containerName, ObjectKey = objectKey });
 
-            return await TryCopyToMemoryStreamAsync(result.OutputStream, args.CancellationToken);
+            var obsConfiguration = args.Configuration.GetObsConfiguration();
+            var pool = GetObsClientPool(obsConfiguration);
+            var obsClient = pool.Get();
+
+            try
+            {
+                if (!FileExistsAsync(obsClient, containerName, objectKey))
+                {
+                    return null;
+                }
+                var result = obsClient.GetObject(new GetObjectRequest() { BucketName = containerName, ObjectKey = objectKey });
+
+                return await TryCopyToMemoryStreamAsync(result.OutputStream, args.CancellationToken);
+            }
+            finally
+            {
+                pool.Return(obsClient);
+            }
         }
 
 
@@ -117,15 +184,26 @@ namespace SharpAbp.Abp.FileStoring.Obs
         {
             var containerName = GetContainerName(args);
             var objectKey = ObsFileNameCalculator.Calculate(args);
-            var obsClient = GetObsClient(args.Configuration);
-            if (!FileExistsAsync(obsClient, containerName, objectKey))
-            {
-                return false;
-            }
 
-            var result = obsClient.GetObject(new GetObjectRequest() { BucketName = containerName, ObjectKey = objectKey });
-            await TryWriteToFileAsync(result.OutputStream, args.Path, args.CancellationToken);
-            return true;
+            var obsConfiguration = args.Configuration.GetObsConfiguration();
+            var pool = GetObsClientPool(obsConfiguration);
+            var obsClient = pool.Get();
+
+            try
+            {
+                if (!FileExistsAsync(obsClient, containerName, objectKey))
+                {
+                    return false;
+                }
+
+                var result = obsClient.GetObject(new GetObjectRequest() { BucketName = containerName, ObjectKey = objectKey });
+                await TryWriteToFileAsync(result.OutputStream, args.Path, args.CancellationToken);
+                return true;
+            }
+            finally
+            {
+                pool.Return(obsClient);
+            }
         }
 
 
@@ -138,29 +216,38 @@ namespace SharpAbp.Abp.FileStoring.Obs
 
             var containerName = GetContainerName(args);
             var objectKey = ObsFileNameCalculator.Calculate(args);
-            var obsClient = GetObsClient(args.Configuration);
 
-            if (args.CheckFileExist && !FileExistsAsync(obsClient, containerName, objectKey))
+            var obsConfiguration = args.Configuration.GetObsConfiguration();
+            var pool = GetObsClientPool(obsConfiguration);
+            var obsClient = pool.Get();
+
+            try
             {
-                return Task.FromResult(string.Empty);
+                if (args.CheckFileExist && !FileExistsAsync(obsClient, containerName, objectKey))
+                {
+                    return Task.FromResult(string.Empty);
+                }
+
+                var expiresSeconds = 600;
+                if (args.Expires.HasValue)
+                {
+                    expiresSeconds = (int)(args.Expires.Value - Clock.Now).TotalSeconds;
+                }
+
+                var temporarySignatureResponse = obsClient.CreateTemporarySignature(new CreateTemporarySignatureRequest()
+                {
+                    BucketName = containerName,
+                    ObjectKey = objectKey,
+                    Expires = expiresSeconds
+                });
+
+                return Task.FromResult(temporarySignatureResponse.SignUrl);
             }
-
-            var expiresSeconds = 600;
-            if (args.Expires.HasValue)
+            finally
             {
-                expiresSeconds = (int)(args.Expires.Value - Clock.Now).TotalSeconds;
+                pool.Return(obsClient);
             }
-
-            var temporarySignatureResponse = obsClient.CreateTemporarySignature(new CreateTemporarySignatureRequest()
-            {
-                BucketName = containerName,
-                ObjectKey = objectKey,
-                Expires = expiresSeconds
-            });
-
-            return Task.FromResult(temporarySignatureResponse.SignUrl);
         }
-
 
         protected virtual string GetContainerName(FileProviderArgs args)
         {
@@ -215,19 +302,21 @@ namespace SharpAbp.Abp.FileStoring.Obs
                 ObjectKey = objectKey
             });
 
-            //上传Id
+            // Upload ID
             var uploadId = initiateMultipartUploadResponse.UploadId;
-            // 计算分片总数。
+            // Calculate the total number of shards
             var partSize = args.Configuration.MultiPartUploadShardingSize;
 
-            var fileSize = args.FileStream.Length;
+            var fileSize = args.FileStream!.Length;
             var partCount = fileSize / partSize;
             if (fileSize % partSize != 0)
             {
                 partCount++;
             }
 
-            // 开始分片上传。partETags是保存partETag的列表，OSS收到用户提交的分片列表后，会逐一验证每个分片数据的有效性。 当所有的数据分片通过验证后，OSS会将这些分片组合成一个完整的文件。
+            // Start multipart upload. partETags is a list that stores partETag. After OBS receives the shard list submitted by the user,
+            // it will verify the validity of each shard data one by one. After all data shards pass the verification,
+            // OBS will combine these shards into a complete file.
             var partETags = new List<PartETag>();
 
             for (var i = 0; i < partCount; i++)
@@ -235,7 +324,7 @@ namespace SharpAbp.Abp.FileStoring.Obs
                 var skipBytes = (long)partSize * i;
                 args.FileStream.Seek(skipBytes, 0);
 
-                // 计算本次上传的分片大小，最后一片为剩余的数据大小。
+                // Calculate the size of the shard to be uploaded this time. The last shard is the remaining data size.
                 var size = (partSize < fileSize - skipBytes) ? partSize : (fileSize - skipBytes);
                 var buffer = new byte[size];
                 await args.FileStream.ReadAsync(buffer, 0, buffer.Length);
@@ -249,11 +338,12 @@ namespace SharpAbp.Abp.FileStoring.Obs
                     PartSize = size,
                     PartNumber = i + 1
                 };
-                // 调用UploadPart接口执行上传功能，返回结果中包含了这个数据片的ETag值。
+                // Call the UploadPart interface to perform the upload function. The result contains the ETag value of this data shard.
                 var result = obsClient.UploadPart(request);
                 partETags.Add(new PartETag(result.PartNumber, result.ETag));
 
-                Logger.LogDebug("UploadId {uploadId} finish {Count}/{partCount}.", uploadId, partETags.Count, partCount);
+                Logger.LogDebug("Multipart upload progress for file '{FileId}' with UploadId '{UploadId}': {CompletedParts}/{TotalParts} completed.", 
+                    args.FileId, uploadId, partETags.Count, partCount);
             }
 
             var completeMultipartUploadResponse = obsClient.CompleteMultipartUpload(new CompleteMultipartUploadRequest()
@@ -264,7 +354,8 @@ namespace SharpAbp.Abp.FileStoring.Obs
                 PartETags = partETags
             });
 
-            Logger.LogDebug("CompleteMultipartUpload {ObjectKey} ({ETag}).", completeMultipartUploadResponse.ObjectKey, completeMultipartUploadResponse.ETag);
+            Logger.LogInformation("Multipart upload completed for file '{FileId}' with key '{ObjectKey}'. ETag: {ETag}", 
+                args.FileId, completeMultipartUploadResponse.ObjectKey, completeMultipartUploadResponse.ETag);
             return args.FileId;
         }
 

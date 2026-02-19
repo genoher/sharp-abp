@@ -1,10 +1,12 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<Import Project="..\..\..\common.props" />
 	<Import Project="..\..\..\configureawait.props" />
 
 	<PropertyGroup>
 		<TargetFramework>$(NetCoreFx)</TargetFramework>
+		<Nullable>enable</Nullable>
+		<WarningsAsErrors>Nullable</WarningsAsErrors>
 		<AssemblyName>SharpAbp.Abp.DbConnections.MySQL</AssemblyName>
 		<PackageId>SharpAbp.Abp.DbConnections.MySQL</PackageId>
 		<AssetTargetFallback>$(AssetTargetFallback);portable-net45+win8+wp8+wpa81;</AssetTargetFallback>
@@ -17,6 +19,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Volo.Abp.EntityFrameworkCore.MySQL" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
 	</ItemGroup>
 
 	<ItemGroup>

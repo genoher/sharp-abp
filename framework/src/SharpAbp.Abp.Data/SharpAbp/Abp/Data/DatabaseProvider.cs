@@ -1,5 +1,8 @@
-﻿namespace SharpAbp.Abp.Data
+namespace SharpAbp.Abp.Data
 {
+    /// <summary>
+    /// Represents the supported database providers
+    /// </summary>
     public enum DatabaseProvider
     {
         SqlServer,
@@ -9,6 +12,9 @@
         Sqlite,
         InMemory,
         Cosmos,
-        Firebird
+        Firebird,
+        Dm,
+        OpenGauss,
+        GaussDB
     }
 }

@@ -1,74 +1,104 @@
-﻿using Aliyun.OSS;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
+using Aliyun.OSS;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
+using Microsoft.Extensions.Options;
+using SharpAbp.Abp.ObjectPool;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Timing;
 
 namespace SharpAbp.Abp.FileStoring.Aliyun
 {
+    [ExposeKeyedService<IFileProvider>(AliyunFileProviderConfigurationNames.ProviderName)]
     public class AliyunFileProvider : FileProviderBase, ITransientDependency
     {
         protected ILogger Logger { get; }
+        protected IServiceProvider ServiceProvider { get; }
+        protected AbpFileStoringAbstractionsOptions Options { get; }
         protected IClock Clock { get; }
-        protected IOssClientFactory OssClientFactory { get; }
+        protected IPoolOrchestrator PoolOrchestrator { get; }
         protected IAliyunFileNameCalculator AliyunFileNameCalculator { get; }
         protected IFileNormalizeNamingService FileNormalizeNamingService { get; }
 
         public AliyunFileProvider(
             ILogger<AliyunFileProvider> logger,
+            IServiceProvider serviceProvider,
+            IOptions<AbpFileStoringAbstractionsOptions> options,
             IClock clock,
-            IOssClientFactory ossClientFactory,
+            IPoolOrchestrator poolOrchestrator,
             IAliyunFileNameCalculator aliyunFileNameCalculator,
             IFileNormalizeNamingService fileNormalizeNamingService)
         {
             Logger = logger;
+            ServiceProvider = serviceProvider;
+            Options = options.Value;
             Clock = clock;
-            OssClientFactory = ossClientFactory;
+            PoolOrchestrator = poolOrchestrator;
             AliyunFileNameCalculator = aliyunFileNameCalculator;
             FileNormalizeNamingService = fileNormalizeNamingService;
         }
 
         public override string Provider => AliyunFileProviderConfigurationNames.ProviderName;
 
-        protected virtual IOss GetOssClient(FileContainerConfiguration fileContainerConfiguration)
+
+        protected virtual ObjectPool<IOss> GetOssClientPool(AliyunFileProviderConfiguration aliyunConfiguration)
         {
-            var aliyunConfiguration = fileContainerConfiguration.GetAliyunConfiguration();
-            return OssClientFactory.Create(aliyunConfiguration);
+            var poolName = NormalizePoolName(aliyunConfiguration);
+            var aliyunOssClientPolicy = ActivatorUtilities.CreateInstance<AliyunOssClientPolicy>(ServiceProvider, aliyunConfiguration);
+            var pool = PoolOrchestrator.GetPool(poolName, aliyunOssClientPolicy, Options.DefaultClientMaximumRetained);
+            return pool;
         }
 
-        protected virtual IOss GetOssClient(AliyunFileProviderConfiguration aliyunConfiguration)
+        protected virtual string NormalizePoolName(AliyunFileProviderConfiguration aliyunConfiguration)
         {
-            return OssClientFactory.Create(aliyunConfiguration);
+            var v = $"{aliyunConfiguration.Endpoint}-{aliyunConfiguration.AccessKeyId}-{aliyunConfiguration.AccessKeySecret}";
+            using var sha1 = SHA1.Create();
+            var hashBuffer = sha1.ComputeHash(Encoding.UTF8.GetBytes(v));
+            var hash = hashBuffer.Aggregate("", (current, b) => current + b.ToString("X2"));
+            return $"FileStoring-{AliyunFileProviderConfigurationNames.ProviderName}-{hash}";
         }
 
         public override async Task<string> SaveAsync(FileProviderSaveArgs args)
         {
             var containerName = GetContainerName(args);
             var objectKey = AliyunFileNameCalculator.Calculate(args);
-            var aliyunConfig = args.Configuration.GetAliyunConfiguration();
-            var ossClient = GetOssClient(aliyunConfig);
-            if (!args.OverrideExisting && FileExistsAsync(ossClient, containerName, objectKey))
+            var aliyunConfiguration = args.Configuration.GetAliyunConfiguration();
+            var pool = GetOssClientPool(aliyunConfiguration);
+            var ossClient = pool.Get();
+            try
             {
-                throw new FileAlreadyExistsException($"Saving FILE '{args.FileId}' does already exists in the container '{containerName}'! Set {nameof(args.OverrideExisting)} if it should be overwritten.");
-            }
-            if (aliyunConfig.CreateContainerIfNotExists)
-            {
-                if (!ossClient.DoesBucketExist(containerName))
+
+                if (!args.OverrideExisting && FileExistsAsync(ossClient, containerName, objectKey))
                 {
-                    ossClient.CreateBucket(containerName);
+                    throw new FileAlreadyExistsException($"Saving FILE '{args.FileId}' does already exists in the container '{containerName}'! Set {nameof(args.OverrideExisting)} if it should be overwritten.");
+                }
+                if (aliyunConfiguration.CreateContainerIfNotExists)
+                {
+                    if (!ossClient.DoesBucketExist(containerName))
+                    {
+                        ossClient.CreateBucket(containerName);
+                    }
+                }
+
+                if (args.Configuration.EnableAutoMultiPartUpload && args.FileStream?.Length > args.Configuration.MultiPartUploadMinFileSize)
+                {
+                    return await MultiPartUploadAsync(ossClient, containerName, objectKey, args);
+                }
+                else
+                {
+                    return await PutObjectAsync(ossClient, containerName, objectKey, args);
                 }
             }
-
-            if (args.Configuration.EnableAutoMultiPartUpload && args.FileStream.Length > args.Configuration.MultiPartUploadMinFileSize)
+            finally
             {
-                return await MultiPartUploadAsync(ossClient, containerName, objectKey, args);
-            }
-            else
-            {
-                return await PutObjectAsync(ossClient, containerName, objectKey, args);
+                pool.Return(ossClient);
             }
         }
 
@@ -76,50 +106,94 @@ namespace SharpAbp.Abp.FileStoring.Aliyun
         {
             var containerName = GetContainerName(args);
             var objectKey = AliyunFileNameCalculator.Calculate(args);
-            var ossClient = GetOssClient(args.Configuration);
-            if (!FileExistsAsync(ossClient, containerName, objectKey))
+
+            var aliyunConfiguration = args.Configuration.GetAliyunConfiguration();
+            var pool = GetOssClientPool(aliyunConfiguration);
+            var ossClient = pool.Get();
+            try
             {
-                return Task.FromResult(false);
+
+                if (!FileExistsAsync(ossClient, containerName, objectKey))
+                {
+                    return Task.FromResult(false);
+                }
+                ossClient.DeleteObject(containerName, objectKey);
+                return Task.FromResult(true);
             }
-            ossClient.DeleteObject(containerName, objectKey);
-            return Task.FromResult(true);
+            finally
+            {
+                pool.Return(ossClient);
+            }
         }
 
         public override Task<bool> ExistsAsync(FileProviderExistsArgs args)
         {
             var containerName = GetContainerName(args);
             var objectKey = AliyunFileNameCalculator.Calculate(args);
-            var ossClient = GetOssClient(args.Configuration);
-            return Task.FromResult(FileExistsAsync(ossClient, containerName, objectKey));
+
+            var aliyunConfiguration = args.Configuration.GetAliyunConfiguration();
+            var pool = GetOssClientPool(aliyunConfiguration);
+            var ossClient = pool.Get();
+
+            try
+            {
+                return Task.FromResult(FileExistsAsync(ossClient, containerName, objectKey));
+            }
+            finally
+            {
+                pool.Return(ossClient);
+            }
         }
 
-        public override async Task<Stream> GetOrNullAsync(FileProviderGetArgs args)
+        public override async Task<Stream?> GetOrNullAsync(FileProviderGetArgs args)
         {
             var containerName = GetContainerName(args);
             var objectKey = AliyunFileNameCalculator.Calculate(args);
-            var ossClient = GetOssClient(args.Configuration);
-            if (!FileExistsAsync(ossClient, containerName, objectKey))
-            {
-                return null;
-            }
-            var result = ossClient.GetObject(containerName, objectKey);
 
-            return await TryCopyToMemoryStreamAsync(result.Content, args.CancellationToken);
+            var aliyunConfiguration = args.Configuration.GetAliyunConfiguration();
+            var pool = GetOssClientPool(aliyunConfiguration);
+            var ossClient = pool.Get();
+
+            try
+            {
+                if (!FileExistsAsync(ossClient, containerName, objectKey))
+                {
+                    return null;
+                }
+                var result = ossClient.GetObject(containerName, objectKey);
+
+                return await TryCopyToMemoryStreamAsync(result.Content, args.CancellationToken);
+            }
+            finally
+            {
+                pool.Return(ossClient);
+            }
         }
 
         public override async Task<bool> DownloadAsync(FileProviderDownloadArgs args)
         {
             var containerName = GetContainerName(args);
             var objectKey = AliyunFileNameCalculator.Calculate(args);
-            var ossClient = GetOssClient(args.Configuration);
-            if (!FileExistsAsync(ossClient, containerName, objectKey))
-            {
-                return false;
-            }
 
-            var result = ossClient.GetObject(containerName, objectKey);
-            await TryWriteToFileAsync(result.Content, args.Path, args.CancellationToken);
-            return true;
+            var aliyunConfiguration = args.Configuration.GetAliyunConfiguration();
+            var pool = GetOssClientPool(aliyunConfiguration);
+            var ossClient = pool.Get();
+
+            try
+            {
+                if (!FileExistsAsync(ossClient, containerName, objectKey))
+                {
+                    return false;
+                }
+
+                var result = ossClient.GetObject(containerName, objectKey);
+                await TryWriteToFileAsync(result.Content, args.Path, args.CancellationToken);
+                return true;
+            }
+            finally
+            {
+                pool.Return(ossClient);
+            }
         }
 
         public override Task<string> GetAccessUrlAsync(FileProviderAccessArgs args)
@@ -131,17 +205,28 @@ namespace SharpAbp.Abp.FileStoring.Aliyun
 
             var containerName = GetContainerName(args);
             var objectKey = AliyunFileNameCalculator.Calculate(args);
-            var ossClient = GetOssClient(args.Configuration);
 
-            if (args.CheckFileExist && !FileExistsAsync(ossClient, containerName, objectKey))
+            var aliyunConfiguration = args.Configuration.GetAliyunConfiguration();
+            var pool = GetOssClientPool(aliyunConfiguration);
+            var ossClient = pool.Get();
+
+            try
             {
-                return Task.FromResult(string.Empty);
+
+                if (args.CheckFileExist && !FileExistsAsync(ossClient, containerName, objectKey))
+                {
+                    return Task.FromResult(string.Empty);
+                }
+
+                var datetime = args.Expires ?? Clock.Now.AddSeconds(600);
+                var uri = ossClient.GeneratePresignedUri(containerName, objectKey, datetime);
+
+                return Task.FromResult(uri.ToString());
             }
-
-            var datetime = args.Expires ?? Clock.Now.AddSeconds(600);
-            var uri = ossClient.GeneratePresignedUri(containerName, objectKey, datetime);
-
-            return Task.FromResult(uri.ToString());
+            finally
+            {
+                pool.Return(ossClient);
+            }
         }
 
         protected virtual string GetContainerName(FileProviderArgs args)
@@ -179,19 +264,21 @@ namespace SharpAbp.Abp.FileStoring.Aliyun
         {
             var initiateMultipartUploadResult = ossClient.InitiateMultipartUpload(new InitiateMultipartUploadRequest(containerName, objectKey));
 
-            //上传Id
+            // Upload ID
             var uploadId = initiateMultipartUploadResult.UploadId;
-            // 计算分片总数。
+            // Calculate the total number of shards
             var partSize = args.Configuration.MultiPartUploadShardingSize;
             //var fi = new FileInfo(spoolFile.FilePath);//?
-            var fileSize = args.FileStream.Length;
+            var fileSize = args.FileStream!.Length;
             var partCount = fileSize / partSize;
             if (fileSize % partSize != 0)
             {
                 partCount++;
             }
 
-            // 开始分片上传。partETags是保存partETag的列表，OSS收到用户提交的分片列表后，会逐一验证每个分片数据的有效性。 当所有的数据分片通过验证后，OSS会将这些分片组合成一个完整的文件。
+            // Start multipart upload. partETags is a list that stores partETag. After OSS receives the shard list submitted by the user, 
+            // it will verify the validity of each shard data one by one. After all data shards pass the verification, 
+            // OSS will combine these shards into a complete file.
             var partETags = new List<PartETag>();
 
             for (var i = 0; i < partCount; i++)
@@ -199,7 +286,7 @@ namespace SharpAbp.Abp.FileStoring.Aliyun
                 var skipBytes = (long)partSize * i;
                 args.FileStream.Seek(skipBytes, 0);
 
-                // 计算本次上传的分片大小，最后一片为剩余的数据大小。
+                // Calculate the size of the shard to be uploaded this time. The last shard is the remaining data size.
                 var size = (partSize < fileSize - skipBytes) ? partSize : (fileSize - skipBytes);
                 var buffer = new byte[size];
                 await args.FileStream.ReadAsync(buffer, 0, buffer.Length);
@@ -210,12 +297,14 @@ namespace SharpAbp.Abp.FileStoring.Aliyun
                     PartSize = size,
                     PartNumber = i + 1
                 };
-                // 调用UploadPart接口执行上传功能，返回结果中包含了这个数据片的ETag值。
+                // Call the UploadPart interface to perform the upload function. The result contains the ETag value of this data shard.
                 var result = ossClient.UploadPart(request);
                 partETags.Add(result.PartETag);
 
-                Logger.LogDebug("UploadId {uploadId} finish {Count}/{partCount}.", uploadId, partETags.Count, partCount);
+                Logger.LogDebug("Multipart upload progress for file '{FileId}' with UploadId '{UploadId}': {CompletedParts}/{TotalParts} completed.", 
+                    args.FileId, uploadId, partETags.Count, partCount);
             }
+            
             var completeMultipartUploadRequest = new CompleteMultipartUploadRequest(containerName, objectKey, uploadId);
             foreach (var partETag in partETags)
             {
@@ -223,9 +312,11 @@ namespace SharpAbp.Abp.FileStoring.Aliyun
             }
 
             var completeMultipartUploadResult = ossClient.CompleteMultipartUpload(completeMultipartUploadRequest);
-            Logger.LogDebug("CompleteMultipartUpload {Key} ({ETag}).", completeMultipartUploadResult.Key, completeMultipartUploadResult.ETag);
+            Logger.LogInformation("Multipart upload completed for file '{FileId}' with key '{ObjectKey}'. ETag: {ETag}", 
+                args.FileId, completeMultipartUploadResult.Key, completeMultipartUploadResult.ETag);
             return args.FileId;
         }
+
 
     }
 }

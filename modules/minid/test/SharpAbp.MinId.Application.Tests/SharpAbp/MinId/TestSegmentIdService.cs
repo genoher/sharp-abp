@@ -1,9 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Data;
+using System.Threading;
 using System.Threading.Tasks;
 using Volo.Abp;
-using Volo.Abp.Data;
 using Volo.Abp.Uow;
 
 namespace SharpAbp.MinId
@@ -25,35 +25,39 @@ namespace SharpAbp.MinId
         }
 
 
-        public override async Task<SegmentId> GetNextSegmentIdAsync(string bizType)
+        public override async Task<SegmentId> GetNextSegmentIdAsync(string bizType, CancellationToken cancellationToken = default)
         {
             SegmentId segmentId = null;
+
+            using var unitOfWork = UnitOfWorkManager.Begin(true, false, IsolationLevel.ReadCommitted, 1000);
             try
             {
-
-                using var uow = UnitOfWorkManager.Begin(true, false, IsolationLevel.ReadCommitted, 1000);
-
-                var minIdInfo = await MinIdInfoRepository.FindByBizTypeAsync(bizType);
-                if (minIdInfo == null)
-                {
-                    throw new AbpException($"Can not find bizType '{bizType}'.");
-                }
+                var minIdInfo = await MinIdInfoRepository.FindByBizTypeAsync(bizType) ?? throw new AbpException($"Can not find bizType '{bizType}'.");
 
                 //New id
                 var newMaxId = minIdInfo.MaxId + minIdInfo.Step;
 
-                Logger.LogDebug("Old maxId:{0}, New maxId {1},Step:{2}", minIdInfo.MaxId, newMaxId, minIdInfo.Step);
+                Logger.LogDebug("Old maxId:{MaxId}, New maxId {newMaxId},Step:{Step}", minIdInfo.MaxId, newMaxId, minIdInfo.Step);
 
                 minIdInfo.UpdateMaxId(newMaxId);
-                await MinIdInfoRepository.UpdateAsync(minIdInfo);
-                await uow.SaveChangesAsync();
+                await MinIdInfoRepository.UpdateAsync(minIdInfo, cancellationToken: cancellationToken);
                 segmentId = ConvertToSegmentId(minIdInfo);
             }
-            catch (AbpDbConcurrencyException ex)
+            catch
             {
-                Logger.LogError(ex, "Get next segmentId conflict. {0}", ex.Message);
-                segmentId = null;
+
+                try
+                {
+                    await unitOfWork.RollbackAsync();
+                }
+                catch
+                {
+                    /* ignored */
+                }
+
+                throw;
             }
+            await unitOfWork.CompleteAsync();
             return segmentId;
         }
 

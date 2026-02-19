@@ -1,14 +1,12 @@
-﻿using Confluent.Kafka;
-using MassTransit;
-using System;
+﻿using System;
 
 namespace SharpAbp.Abp.MassTransit.Kafka
 {
     public static class KafkaUtil
     {
-        public static string TopicFormat(string prefix, string topic)
+        public static string TopicFormat(string? prefix, string topic)
         {
-            if (topic.IsNullOrWhiteSpace())
+            if (prefix.IsNullOrWhiteSpace())
             {
                 return topic;
             }

@@ -1,12 +1,12 @@
 ﻿using Azure.Storage.Blobs;
 using System;
 using System.IO;
-using System.Net;
 using System.Threading.Tasks;
 using Volo.Abp.DependencyInjection;
 
 namespace SharpAbp.Abp.FileStoring.Azure
 {
+    [ExposeKeyedService<IFileProvider>(AzureFileProviderConfigurationNames.ProviderName)]
     public class AzureFileProvider : FileProviderBase, ITransientDependency
     {
         protected IAzureFileNameCalculator AzureFileNameCalculator { get; }
@@ -59,7 +59,7 @@ namespace SharpAbp.Abp.FileStoring.Azure
             return await FileExistsAsync(args, fileName);
         }
 
-        public override async Task<Stream> GetOrNullAsync(FileProviderGetArgs args)
+        public override async Task<Stream?> GetOrNullAsync(FileProviderGetArgs args)
         {
             var fileName = AzureFileNameCalculator.Calculate(args);
             if (!await FileExistsAsync(args, fileName))
@@ -69,9 +69,7 @@ namespace SharpAbp.Abp.FileStoring.Azure
 
             var blobClient = GetBlobClient(args, fileName);
             var download = await blobClient.DownloadAsync(args.CancellationToken);
-            var memoryStream = new MemoryStream();
-            await download.Value.Content.CopyToAsync(memoryStream);
-            return memoryStream;
+            return await TryCopyToMemoryStreamAsync(download.Value.Content, args.CancellationToken);
         }
 
 
@@ -84,7 +82,11 @@ namespace SharpAbp.Abp.FileStoring.Azure
             }
             var blobClient = GetBlobClient(args, fileName);
             var download = await blobClient.DownloadToAsync(args.Path, args.CancellationToken);
-            return download.Status == (int)HttpStatusCode.OK;
+            if (!download.IsError)
+            {
+                await TryWriteToFileAsync(download.Content.ToStream(), args.Path, args.CancellationToken);
+            }
+            return false;
         }
 
         public override Task<string> GetAccessUrlAsync(FileProviderAccessArgs args)

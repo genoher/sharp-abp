@@ -7,13 +7,13 @@ namespace SharpAbp.Abp.FileStoring.Aws
     {
         public string AccessKeyId
         {
-            get => _containerConfiguration.GetConfigurationOrDefault<string>(AwsFileProviderConfigurationNames.AccessKeyId);
+            get => _containerConfiguration.GetConfiguration<string>(AwsFileProviderConfigurationNames.AccessKeyId);
             set => _containerConfiguration.SetConfiguration(AwsFileProviderConfigurationNames.AccessKeyId, value);
         }
 
         public string SecretAccessKey
         {
-            get => _containerConfiguration.GetConfigurationOrDefault<string>(AwsFileProviderConfigurationNames.SecretAccessKey);
+            get => _containerConfiguration.GetConfiguration<string>(AwsFileProviderConfigurationNames.SecretAccessKey);
             set => _containerConfiguration.SetConfiguration(AwsFileProviderConfigurationNames.SecretAccessKey, value);
         }
 
@@ -35,7 +35,7 @@ namespace SharpAbp.Abp.FileStoring.Aws
             set => _containerConfiguration.SetConfiguration(AwsFileProviderConfigurationNames.UseTemporaryFederatedCredentials, value);
         }
 
-        public string ProfileName
+        public string? ProfileName
         {
             get => _containerConfiguration.GetConfigurationOrDefault<string>(AwsFileProviderConfigurationNames.ProfileName);
             set => _containerConfiguration.SetConfiguration(AwsFileProviderConfigurationNames.ProfileName, value);
@@ -43,7 +43,7 @@ namespace SharpAbp.Abp.FileStoring.Aws
 
         public string ProfilesLocation
         {
-            get => _containerConfiguration.GetConfigurationOrDefault<string>(AwsFileProviderConfigurationNames.ProfilesLocation);
+            get => _containerConfiguration.GetConfiguration<string>(AwsFileProviderConfigurationNames.ProfilesLocation);
             set => _containerConfiguration.SetConfiguration(AwsFileProviderConfigurationNames.ProfilesLocation, value);
         }
 
@@ -64,7 +64,7 @@ namespace SharpAbp.Abp.FileStoring.Aws
 
         public string Policy
         {
-            get => _containerConfiguration.GetConfigurationOrDefault<string>(AwsFileProviderConfigurationNames.Policy);
+            get => _containerConfiguration.GetConfiguration<string>(AwsFileProviderConfigurationNames.Policy);
             set => _containerConfiguration.SetConfiguration(AwsFileProviderConfigurationNames.Policy, value);
         }
 
@@ -82,7 +82,7 @@ namespace SharpAbp.Abp.FileStoring.Aws
         /// </summary>
         public string ContainerName
         {
-            get => _containerConfiguration.GetConfigurationOrDefault<string>(AwsFileProviderConfigurationNames.ContainerName);
+            get => _containerConfiguration.GetConfiguration<string>(AwsFileProviderConfigurationNames.ContainerName);
             set => _containerConfiguration.SetConfiguration(AwsFileProviderConfigurationNames.ContainerName, value);
         }
 
@@ -96,7 +96,7 @@ namespace SharpAbp.Abp.FileStoring.Aws
         }
 
         private readonly string _temporaryCredentialsCacheKey;
-        public string TemporaryCredentialsCacheKey
+        public string? TemporaryCredentialsCacheKey
         {
             get => _containerConfiguration.GetConfigurationOrDefault(AwsFileProviderConfigurationNames.TemporaryCredentialsCacheKey, _temporaryCredentialsCacheKey);
             set => _containerConfiguration.SetConfiguration(AwsFileProviderConfigurationNames.TemporaryCredentialsCacheKey, value);

@@ -1,37 +1,69 @@
-﻿using Amazon.S3;
-using Amazon.S3.Model;
-using Amazon.S3.Util;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
+using Amazon.S3;
+using Amazon.S3.Model;
+using Amazon.S3.Util;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
+using Microsoft.Extensions.Options;
+using SharpAbp.Abp.ObjectPool;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Timing;
 
 namespace SharpAbp.Abp.FileStoring.Aws
 {
+    [ExposeKeyedService<IFileProvider>(AwsFileProviderConfigurationNames.ProviderName)]
     public class AwsFileProvider : FileProviderBase, ITransientDependency
     {
         public override string Provider => AwsFileProviderConfigurationNames.ProviderName;
 
         protected ILogger Logger { get; }
+        protected IServiceProvider ServiceProvider { get; }
+        protected AbpFileStoringAbstractionsOptions Options { get; }
         protected IClock Clock { get; }
+        protected IPoolOrchestrator PoolOrchestrator { get; }
         protected IAwsFileNameCalculator AwsFileNameCalculator { get; }
-        protected IAmazonS3ClientFactory AmazonS3ClientFactory { get; }
         protected IFileNormalizeNamingService FileNormalizeNamingService { get; }
         public AwsFileProvider(
             ILogger<AwsFileProvider> logger,
+            IServiceProvider serviceProvider,
+            IOptions<AbpFileStoringAbstractionsOptions> options,
             IClock clock,
+            IPoolOrchestrator poolOrchestrator,
             IAwsFileNameCalculator awsFileNameCalculator,
-            IAmazonS3ClientFactory amazonS3ClientFactory,
             IFileNormalizeNamingService fileNormalizeNamingService)
         {
             Logger = logger;
+            ServiceProvider = serviceProvider;
+            Options = options.Value;
             Clock = clock;
+            PoolOrchestrator = poolOrchestrator;
             AwsFileNameCalculator = awsFileNameCalculator;
-            AmazonS3ClientFactory = amazonS3ClientFactory;
             FileNormalizeNamingService = fileNormalizeNamingService;
+        }
+
+        protected virtual ObjectPool<IAmazonS3> GetAmazonS3Pool(AwsFileProviderConfiguration awsConfiguration)
+        {
+            var poolName = NormalizePoolName(awsConfiguration);
+            var amazonS3ClientPolicy = ActivatorUtilities.CreateInstance<AmazonS3ClientPolicy>(ServiceProvider, awsConfiguration);
+            var pool = PoolOrchestrator.GetPool(poolName, amazonS3ClientPolicy, Options.DefaultClientMaximumRetained);
+            return pool;
+        }
+
+
+        protected virtual string NormalizePoolName(AwsFileProviderConfiguration awsConfiguration)
+        {
+            var v = $"{awsConfiguration.Region}-{awsConfiguration.AccessKeyId}-{awsConfiguration.SecretAccessKey}";
+            using var sha1 = SHA1.Create();
+            var hashBuffer = sha1.ComputeHash(Encoding.UTF8.GetBytes(v));
+            var hash = hashBuffer.Aggregate("", (current, b) => current + b.ToString("X2"));
+            return $"FileStoring-{AwsFileProviderConfigurationNames.ProviderName}-{hash}";
         }
 
         public override async Task<string> SaveAsync(FileProviderSaveArgs args)
@@ -40,25 +72,37 @@ namespace SharpAbp.Abp.FileStoring.Aws
             var configuration = args.Configuration.GetAwsConfiguration();
             var containerName = GetContainerName(args);
 
-            using var amazonS3Client = await GetAmazonS3Client(args);
-            if (!args.OverrideExisting && await FileExistsAsync(amazonS3Client, containerName, objectKey))
-            {
-                throw new FileAlreadyExistsException(
-                    $"Saving File '{args.FileId}' does already exists in the container '{containerName}'! Set {nameof(args.OverrideExisting)} if it should be overwritten.");
-            }
+            var awsConfiguration = args.Configuration.GetAwsConfiguration();
+            var pool = GetAmazonS3Pool(awsConfiguration);
+            var amazonS3Client = pool.Get();
 
-            if (configuration.CreateContainerIfNotExists)
+            try
             {
-                await CreateContainerIfNotExists(amazonS3Client, containerName);
-            }
 
-            if (args.Configuration.EnableAutoMultiPartUpload && args.FileStream.Length > args.Configuration.MultiPartUploadMinFileSize)
-            {
-                return await MultiPartUploadAsync(amazonS3Client, containerName, objectKey, args);
+                if (!args.OverrideExisting && await FileExistsAsync(amazonS3Client, containerName, objectKey))
+                {
+                    throw new FileAlreadyExistsException(
+                        $"Saving File '{args.FileId}' does already exists in the container '{containerName}'! Set {nameof(args.OverrideExisting)} if it should be overwritten.");
+                }
+
+                if (configuration.CreateContainerIfNotExists)
+                {
+                    await CreateContainerIfNotExists(amazonS3Client, containerName);
+                }
+
+                if (args.Configuration.EnableAutoMultiPartUpload && args.FileStream!.Length > args.Configuration.MultiPartUploadMinFileSize)
+                {
+                    return await MultiPartUploadAsync(amazonS3Client, containerName, objectKey, args);
+                }
+                else
+                {
+                    return await PutObjectAsync(amazonS3Client, containerName, objectKey, args);
+                }
+
             }
-            else
+            finally
             {
-                return await PutObjectAsync(amazonS3Client, containerName, objectKey, args);
+                pool.Return(amazonS3Client);
             }
         }
 
@@ -67,19 +111,30 @@ namespace SharpAbp.Abp.FileStoring.Aws
             var objectKey = AwsFileNameCalculator.Calculate(args);
             var containerName = GetContainerName(args);
 
-            using var amazonS3Client = await GetAmazonS3Client(args);
-            if (!await FileExistsAsync(amazonS3Client, containerName, objectKey))
+            var awsConfiguration = args.Configuration.GetAwsConfiguration();
+            var pool = GetAmazonS3Pool(awsConfiguration);
+            var amazonS3Client = pool.Get();
+
+            try
             {
-                return false;
+
+                if (!await FileExistsAsync(amazonS3Client, containerName, objectKey))
+                {
+                    return false;
+                }
+
+                await amazonS3Client.DeleteObjectAsync(new DeleteObjectRequest
+                {
+                    BucketName = containerName,
+                    Key = objectKey
+                }, args.CancellationToken);
+
+                return true;
             }
-
-            await amazonS3Client.DeleteObjectAsync(new DeleteObjectRequest
+            finally
             {
-                BucketName = containerName,
-                Key = objectKey
-            }, args.CancellationToken);
-
-            return true;
+                pool.Return(amazonS3Client);
+            }
         }
 
         public override async Task<bool> ExistsAsync(FileProviderExistsArgs args)
@@ -87,27 +142,49 @@ namespace SharpAbp.Abp.FileStoring.Aws
             var objectKey = AwsFileNameCalculator.Calculate(args);
             var containerName = GetContainerName(args);
 
-            using var amazonS3Client = await GetAmazonS3Client(args);
-            return await FileExistsAsync(amazonS3Client, containerName, objectKey);
+            var awsConfiguration = args.Configuration.GetAwsConfiguration();
+            var pool = GetAmazonS3Pool(awsConfiguration);
+            var amazonS3Client = pool.Get();
+
+            try
+            {
+
+                return await FileExistsAsync(amazonS3Client, containerName, objectKey);
+            }
+            finally
+            {
+                pool.Return(amazonS3Client);
+            }
         }
-        public override async Task<Stream> GetOrNullAsync(FileProviderGetArgs args)
+
+        public override async Task<Stream?> GetOrNullAsync(FileProviderGetArgs args)
         {
             var objectKey = AwsFileNameCalculator.Calculate(args);
             var containerName = GetContainerName(args);
 
-            using var amazonS3Client = await GetAmazonS3Client(args);
-            if (!await FileExistsAsync(amazonS3Client, containerName, objectKey))
+            var awsConfiguration = args.Configuration.GetAwsConfiguration();
+            var pool = GetAmazonS3Pool(awsConfiguration);
+            var amazonS3Client = pool.Get();
+
+            try
             {
-                return null;
+                if (!await FileExistsAsync(amazonS3Client, containerName, objectKey))
+                {
+                    return null;
+                }
+
+                var response = await amazonS3Client.GetObjectAsync(new GetObjectRequest
+                {
+                    BucketName = containerName,
+                    Key = objectKey
+                }, args.CancellationToken);
+
+                return await TryCopyToMemoryStreamAsync(response.ResponseStream, args.CancellationToken);
             }
-
-            var response = await amazonS3Client.GetObjectAsync(new GetObjectRequest
+            finally
             {
-                BucketName = containerName,
-                Key = objectKey
-            }, args.CancellationToken);
-
-            return await TryCopyToMemoryStreamAsync(response.ResponseStream, args.CancellationToken);
+                pool.Return(amazonS3Client);
+            }
         }
 
         public override async Task<bool> DownloadAsync(FileProviderDownloadArgs args)
@@ -115,20 +192,30 @@ namespace SharpAbp.Abp.FileStoring.Aws
             var objectKey = AwsFileNameCalculator.Calculate(args);
             var containerName = GetContainerName(args);
 
-            using var amazonS3Client = await GetAmazonS3Client(args);
-            if (!await FileExistsAsync(amazonS3Client, containerName, objectKey))
+            var awsConfiguration = args.Configuration.GetAwsConfiguration();
+            var pool = GetAmazonS3Pool(awsConfiguration);
+            var amazonS3Client = pool.Get();
+
+            try
             {
-                return false;
+                if (!await FileExistsAsync(amazonS3Client, containerName, objectKey))
+                {
+                    return false;
+                }
+
+                var response = await amazonS3Client.GetObjectAsync(new GetObjectRequest
+                {
+                    BucketName = containerName,
+                    Key = objectKey
+                }, args.CancellationToken);
+
+                await TryWriteToFileAsync(response.ResponseStream, args.Path, args.CancellationToken);
+                return true;
             }
-
-            var response = await amazonS3Client.GetObjectAsync(new GetObjectRequest
+            finally
             {
-                BucketName = containerName,
-                Key = objectKey
-            }, args.CancellationToken);
-
-            await TryWriteToFileAsync(response.ResponseStream, args.Path, args.CancellationToken);
-            return true;
+                pool.Return(amazonS3Client);
+            }
         }
 
         public override async Task<string> GetAccessUrlAsync(FileProviderAccessArgs args)
@@ -141,26 +228,36 @@ namespace SharpAbp.Abp.FileStoring.Aws
             var objectKey = AwsFileNameCalculator.Calculate(args);
             var containerName = GetContainerName(args);
 
-            using var amazonS3Client = await GetAmazonS3Client(args);
-            if (args.CheckFileExist && !await FileExistsAsync(amazonS3Client, containerName, objectKey))
+            var awsConfiguration = args.Configuration.GetAwsConfiguration();
+            var pool = GetAmazonS3Pool(awsConfiguration);
+            var amazonS3Client = pool.Get();
+
+            try
             {
-                return string.Empty;
+                if (args.CheckFileExist && !await FileExistsAsync(amazonS3Client, containerName, objectKey))
+                {
+                    return string.Empty;
+                }
+
+                var datetime = args.Expires ?? Clock.Now.AddSeconds(600);
+                var url = amazonS3Client.GetPreSignedURL(new GetPreSignedUrlRequest()
+                {
+                    BucketName = containerName,
+                    Key = objectKey,
+                    Expires = datetime
+                });
+
+                return url;
             }
-
-            var datetime = args.Expires ?? Clock.Now.AddSeconds(600);
-            var url = amazonS3Client.GetPreSignedURL(new GetPreSignedUrlRequest()
+            finally
             {
-                BucketName = containerName,
-                Key = objectKey,
-                Expires = datetime
-            });
-
-            return url;
+                pool.Return(amazonS3Client);
+            }
         }
 
 
         protected virtual async Task<bool> FileExistsAsync(
-            AmazonS3Client amazonS3Client,
+            IAmazonS3 amazonS3Client,
             string containerName,
             string fileName)
         {
@@ -187,7 +284,7 @@ namespace SharpAbp.Abp.FileStoring.Aws
         }
 
         protected virtual async Task CreateContainerIfNotExists(
-            AmazonS3Client amazonS3Client,
+            IAmazonS3 amazonS3Client,
             string containerName)
         {
             if (!await AmazonS3Util.DoesS3BucketExistV2Async(amazonS3Client, containerName))
@@ -199,11 +296,7 @@ namespace SharpAbp.Abp.FileStoring.Aws
             }
         }
 
-        protected virtual async Task<AmazonS3Client> GetAmazonS3Client(FileProviderArgs args)
-        {
-            var awsConfiguration = args.Configuration.GetAwsConfiguration();
-            return await AmazonS3ClientFactory.GetAmazonS3Client(awsConfiguration);
-        }
+ 
 
         protected virtual string GetContainerName(FileProviderArgs args)
         {
@@ -234,25 +327,28 @@ namespace SharpAbp.Abp.FileStoring.Aws
             string objectKey,
             FileProviderSaveArgs args)
         {
+            var configuration = args.Configuration.GetAwsConfiguration();
             var initiateMultipartUploadResponse = await amazonS3Client.InitiateMultipartUploadAsync(new InitiateMultipartUploadRequest()
             {
                 BucketName = containerName,
                 Key = objectKey
             }, args.CancellationToken);
 
-            //上传Id
+            // Upload ID
             var uploadId = initiateMultipartUploadResponse.UploadId;
-            // 计算分片总数。
+            // Calculate the total number of shards
             var partSize = args.Configuration.MultiPartUploadShardingSize;
 
-            var fileSize = args.FileStream.Length;
+            var fileSize = args.FileStream!.Length;
             var partCount = fileSize / partSize;
             if (fileSize % partSize != 0)
             {
                 partCount++;
             }
 
-            // 开始分片上传。partETags是保存partETag的列表，OSS收到用户提交的分片列表后，会逐一验证每个分片数据的有效性。 当所有的数据分片通过验证后，OSS会将这些分片组合成一个完整的文件。
+            // Start multipart upload. partETags is a list that stores partETag. After S3 receives the shard list submitted by the user, 
+            // it will verify the validity of each shard data one by one. After all data shards pass the verification, 
+            // S3 will combine these shards into a complete file.
             var partETags = new List<PartETag>();
 
             for (var i = 0; i < partCount; i++)
@@ -260,7 +356,7 @@ namespace SharpAbp.Abp.FileStoring.Aws
                 var skipBytes = (long)partSize * i;
                 args.FileStream.Seek(skipBytes, 0);
 
-                // 计算本次上传的分片大小，最后一片为剩余的数据大小。
+                // Calculate the size of the shard to be uploaded this time. The last shard is the remaining data size.
                 var size = (partSize < fileSize - skipBytes) ? partSize : (fileSize - skipBytes);
                 var buffer = new byte[size];
                 await args.FileStream.ReadAsync(buffer, 0, buffer.Length);
@@ -272,14 +368,15 @@ namespace SharpAbp.Abp.FileStoring.Aws
                     UploadId = uploadId,
                     InputStream = new MemoryStream(buffer),
                     PartSize = size,
-                    PartNumber = i + 1
+                    PartNumber = i + 1,
                 };
 
-                // 调用UploadPart接口执行上传功能，返回结果中包含了这个数据片的ETag值。
+                // Call the UploadPart interface to perform the upload function. The result contains the ETag value of this data shard.
                 var result = await amazonS3Client.UploadPartAsync(request, args.CancellationToken);
                 partETags.Add(new PartETag(result.PartNumber, result.ETag));
 
-                Logger.LogDebug("UploadId {uploadId} finish {Count}/{partCount}.", uploadId, partETags.Count, partCount);
+                Logger.LogDebug("Multipart upload progress for file '{FileId}' with UploadId '{UploadId}': {CompletedParts}/{TotalParts} completed.", 
+                    args.FileId, uploadId, partETags.Count, partCount);
             }
 
             var completeMultipartUploadResponse = await amazonS3Client.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest()
@@ -290,10 +387,13 @@ namespace SharpAbp.Abp.FileStoring.Aws
                 PartETags = partETags
             }, args.CancellationToken);
 
-            Logger.LogDebug("CompleteMultipartUpload {Key} ({ETag}).", completeMultipartUploadResponse.Key, completeMultipartUploadResponse.ETag);
+            Logger.LogInformation("Multipart upload completed for file '{FileId}' with key '{ObjectKey}'. ETag: {ETag}", 
+                args.FileId, completeMultipartUploadResponse.Key, completeMultipartUploadResponse.ETag);
 
             return args.FileId;
         }
+
+ 
 
     }
 }

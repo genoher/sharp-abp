@@ -1,4 +1,4 @@
-﻿using FastDFSCore;
+using FastDFSCore;
 using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
@@ -8,6 +8,7 @@ using Volo.Abp.Timing;
 
 namespace SharpAbp.Abp.FileStoring.FastDFS
 {
+    [ExposeKeyedService<IFileProvider>(FastDFSFileProviderConfigurationNames.ProviderName)]
     public class FastDFSFileProvider : FileProviderBase, ITransientDependency
     {
         protected ILogger Logger { get; }
@@ -87,12 +88,13 @@ namespace SharpAbp.Abp.FileStoring.FastDFS
             }
             catch (Exception ex)
             {
-                Logger.LogException(ex, LogLevel.Error);
+                Logger.LogError(ex, "Failed to download file '{FileId}' from FastDFS. Container: {ContainerName}, Cluster: {ClusterName}", 
+                    fileId, containerName, configuration.ClusterName);
                 return false;
             }
         }
 
-        public override async Task<Stream> GetOrNullAsync(FileProviderGetArgs args)
+        public override async Task<Stream?> GetOrNullAsync(FileProviderGetArgs args)
         {
             var configuration = args.Configuration.GetFastDFSConfiguration();
 
@@ -105,11 +107,14 @@ namespace SharpAbp.Abp.FileStoring.FastDFS
             try
             {
                 var content = await Client.DownloadFileAsync(storageNode, fileId, configuration.ClusterName);
-                return new MemoryStream(content);
+                var ms = new MemoryStream(content);
+                ms.Seek(0, SeekOrigin.Begin);
+                return ms;
             }
             catch (Exception ex)
             {
-                Logger.LogException(ex, LogLevel.Error);
+                Logger.LogError(ex, "Failed to get file '{FileId}' from FastDFS. Container: {ContainerName}, Cluster: {ClusterName}", 
+                    fileId, containerName, configuration.ClusterName);
                 return null;
             }
         }
@@ -156,10 +161,11 @@ namespace SharpAbp.Abp.FileStoring.FastDFS
             }
         }
 
-        /// <summary>Convert time to int32 timestamp(from 1970-01-01 00:00:00)
+        /// <summary>
+        /// Convert time to int32 timestamp (from 1970-01-01 00:00:00)
         /// </summary>
-        /// <param name="datetime">time</param>
-        /// <returns></returns>
+        /// <param name="datetime">Time to convert</param>
+        /// <returns>Timestamp as int32</returns>
         protected virtual int ToInt32(DateTime datetime)
         {
             var timeSpan = datetime.ToUniversalTime() - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);

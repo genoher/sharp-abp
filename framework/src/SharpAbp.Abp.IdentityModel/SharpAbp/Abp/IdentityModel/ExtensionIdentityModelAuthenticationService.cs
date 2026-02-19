@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
@@ -31,19 +31,29 @@ namespace SharpAbp.Abp.IdentityModel
         /// <param name="userPassword"></param>
         /// <param name="identityClientName"></param>
         /// <returns></returns>
-        public virtual async Task<string> GetUserAccessTokenAsync(
+        public virtual async Task<string?> GetUserAccessTokenAsync(
             string userName,
             string userPassword,
-            string identityClientName = null)
+            string? identityClientName = null)
         {
             var configuration = GetClientConfiguration(userName, userPassword, identityClientName);
             if (configuration == null)
             {
-                Logger.LogWarning($"Could not find {nameof(IdentityClientConfiguration)} for {identityClientName}. Either define a configuration for {identityClientName} or set a default configuration.");
+                Logger.LogWarning("Could not find {IdentityClientConfiguration} for client name '{IdentityClientName}'. Either define a configuration for this client or set a default configuration.",
+                    nameof(IdentityClientConfiguration), identityClientName ?? "null");
                 return null;
             }
 
-            return await IdentityModelAuthenticationService.GetAccessTokenAsync(configuration);
+            try
+            {
+                return await IdentityModelAuthenticationService.GetAccessTokenAsync(configuration);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to get access token for user '{UserName}' with client '{IdentityClientName}'.",
+                    userName, identityClientName ?? "default");
+                throw;
+            }
         }
 
         /// <summary>
@@ -53,27 +63,37 @@ namespace SharpAbp.Abp.IdentityModel
         /// <param name="providerKey"></param>
         /// <param name="identityClientName"></param>
         /// <returns></returns>
-        public virtual async Task<string> GetExternalCredentialsAccessTokenAsync(
-            string loginProvider, 
-            string providerKey, 
-            string identityClientName = null)
+        public virtual async Task<string?> GetExternalCredentialsAccessTokenAsync(
+            string loginProvider,
+            string providerKey,
+            string? identityClientName = null)
         {
             var configuration = GetClientConfiguration(loginProvider, providerKey, identityClientName);
             if (configuration == null)
             {
-                Logger.LogWarning($"Could not find {nameof(IdentityClientConfiguration)} for {identityClientName}. Either define a configuration for {identityClientName} or set a default configuration.");
+                Logger.LogWarning("Could not find {IdentityClientConfiguration} for client name '{IdentityClientName}'. Either define a configuration for this client or set a default configuration.",
+                    nameof(IdentityClientConfiguration), identityClientName ?? "null");
                 return null;
             }
 
-            return await IdentityModelAuthenticationService.GetAccessTokenAsync(configuration);
+            try
+            {
+                return await IdentityModelAuthenticationService.GetAccessTokenAsync(configuration);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to get access token for external credentials. Login provider: '{LoginProvider}', Provider key: '{ProviderKey}', Client name: '{IdentityClientName}'.",
+                    loginProvider, providerKey, identityClientName ?? "default");
+                throw;
+            }
         }
 
         protected virtual IdentityClientConfiguration GetClientConfiguration(
             string userName,
             string userPassword,
-            string identityClientName = null)
+            string? identityClientName = null)
         {
-            IdentityClientConfiguration identityClientConfiguration;
+            IdentityClientConfiguration? identityClientConfiguration;
             if (identityClientName.IsNullOrWhiteSpace())
             {
                 identityClientConfiguration = ClientOptions.IdentityClients.Default;
@@ -85,15 +105,15 @@ namespace SharpAbp.Abp.IdentityModel
             }
 
             var configuration = new IdentityClientConfiguration(
-                identityClientConfiguration.Authority,
-                identityClientConfiguration.Scope,
-                identityClientConfiguration.ClientId,
-                identityClientConfiguration.ClientSecret,
-                identityClientConfiguration.GrantType,
+                identityClientConfiguration?.Authority!,
+                identityClientConfiguration?.Scope!,
+                identityClientConfiguration?.ClientId!,
+                identityClientConfiguration?.ClientSecret!,
+                identityClientConfiguration?.GrantType!,
                 userName,
                 userPassword,
-                identityClientConfiguration.RequireHttps,
-                identityClientConfiguration.CacheAbsoluteExpiration);
+                identityClientConfiguration?.RequireHttps ?? false,
+                identityClientConfiguration?.CacheAbsoluteExpiration ?? 1800);
 
             return configuration;
         }

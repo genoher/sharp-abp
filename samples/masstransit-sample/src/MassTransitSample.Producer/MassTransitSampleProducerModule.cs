@@ -1,12 +1,13 @@
 ﻿using MassTransit;
 using MassTransitSample.Common;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SharpAbp.Abp.MassTransit;
 using SharpAbp.Abp.MassTransit.ActiveMQ;
 using SharpAbp.Abp.MassTransit.Kafka;
+using SharpAbp.Abp.MassTransit.PostgreSql;
 using SharpAbp.Abp.MassTransit.RabbitMQ;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Volo.Abp.Autofac;
 using Volo.Abp.Modularity;
@@ -19,21 +20,20 @@ namespace MassTransitSample.Producer
         typeof(AbpMassTransitRabbitMqModule),
         typeof(AbpMassTransitKafkaModule),
         typeof(AbpMassTransitActiveMqModule),
+        typeof(AbpMassTransitPostgreSqlModule),
         typeof(AbpAutofacModule)
         )]
     public class MassTransitSampleProducerModule : AbpModule
     {
-        public override void PreConfigureServices(ServiceConfigurationContext context)
+        public override void ConfigureServices(ServiceConfigurationContext context)
         {
-            AsyncHelper.RunSync(() => PreConfigureServicesAsync(context));
+            AsyncHelper.RunSync(() => ConfigureServicesAsync(context));
         }
 
-        public override Task PreConfigureServicesAsync(ServiceConfigurationContext context)
+        public override Task ConfigureServicesAsync(ServiceConfigurationContext context)
         {
             var configuration = context.Services.GetConfiguration();
-            var abpMassTransitOptions = configuration
-                .GetSection("MassTransitOptions")
-                .Get<AbpMassTransitOptions>();
+            var abpMassTransitOptions = context.Services.ExecutePreConfiguredActions<AbpMassTransitOptions>();
 
             if (abpMassTransitOptions.Provider.Equals(MassTransitRabbitMqConsts.ProviderName, StringComparison.OrdinalIgnoreCase))
             {
@@ -65,14 +65,15 @@ namespace MassTransitSample.Producer
             {
                 PreConfigure<AbpMassTransitKafkaOptions>(options =>
                 {
-                    options.Producers.Add(new KafkaProducerConfiguration()
-                    {
-                        Topic = KafkaTopics.Topic1,
-                        Configure = new Action<string, IRiderRegistrationConfigurator>((topic, c) =>
-                        {
-                            c.AddProducer<string, MassTransitSampleMessage>(topic);
-                        })
-                    });
+                    //options.Producers.Add(new KafkaProducerConfiguration()
+                    //{
+                    //    Topic = KafkaTopics.Topic1,
+                    //    Configure = new Action<string, IRiderRegistrationConfigurator>((topic, c) =>
+                    //    {
+                    //        c.AddProducer<string, MassTransitSampleMessage>(topic);
+
+                    //    })
+                    //});
                 });
             }
             else if (abpMassTransitOptions.Provider.Equals(MassTransitActiveMqConsts.ProviderName, StringComparison.OrdinalIgnoreCase))
@@ -96,6 +97,20 @@ namespace MassTransitSample.Producer
                             EndpointConvention.Map<MassTransitSampleMessage>(u);
                         }),
 
+                    });
+
+                });
+            }
+            else if (abpMassTransitOptions.Provider.Equals(MassTransitPostgreSqlConsts.ProviderName, StringComparison.OrdinalIgnoreCase))
+            {
+                PreConfigure<AbpMassTransitPostgreSqlOptions>(options =>
+                {
+                    options.Producers.Add(new PostgreSqlProducerConfiguration()
+                    {
+                        MessageTypes = [typeof(MassTransitSampleMessage)],
+                        Configure = new Action<ISqlMessagePublishTopologyConfigurator, Type>((cfg, t) =>
+                        {
+                        })
                     });
 
                 });

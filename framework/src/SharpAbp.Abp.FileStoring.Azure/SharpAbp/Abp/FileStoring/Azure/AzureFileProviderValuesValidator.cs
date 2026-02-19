@@ -1,11 +1,15 @@
-﻿using Microsoft.Extensions.Options;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.Options;
+using SharpAbp.Abp.Core.Extensions;
+using SharpAbp.Abp.Validation;
+using Volo.Abp;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Validation;
 
 namespace SharpAbp.Abp.FileStoring.Azure
 {
+    [ExposeKeyedService<IFileProviderValuesValidator>(AzureFileProviderConfigurationNames.ProviderName)]
     public class AzureFileProviderValuesValidator : BaseFileProviderValuesValidator, ITransientDependency
     {
         public override string Provider => AzureFileProviderConfigurationNames.ProviderName;
@@ -15,10 +19,10 @@ namespace SharpAbp.Abp.FileStoring.Azure
 
         }
 
-        public override IAbpValidationResult Validate(Dictionary<string, string> keyValuePairs)
+        public override IAbpValidationResult Validate(List<NameValue> values)
         {
             var result = new AbpValidationResult();
-            ValidateBasic(result, keyValuePairs);
+            ValidateBasic(result, values);
 
             if (result.Errors.Any())
             {
@@ -26,13 +30,13 @@ namespace SharpAbp.Abp.FileStoring.Azure
             }
 
             //ConnectionString
-            ValidateHelper.NotNullOrWhiteSpace(result, Provider, AzureFileProviderConfigurationNames.ConnectionString, keyValuePairs[AzureFileProviderConfigurationNames.ConnectionString]);
+            ValidateHelper.NotNullOrWhiteSpace(result, Provider, AzureFileProviderConfigurationNames.ConnectionString, values.FindValue(AzureFileProviderConfigurationNames.ConnectionString));
 
             //ContainerName
-            ValidateHelper.NotNullOrWhiteSpace(result, Provider, AzureFileProviderConfigurationNames.ContainerName, keyValuePairs[AzureFileProviderConfigurationNames.ContainerName]);
+            ValidateHelper.NotNullOrWhiteSpace(result, Provider, AzureFileProviderConfigurationNames.ContainerName, values.FindValue(AzureFileProviderConfigurationNames.ContainerName));
 
             //CreateContainerIfNotExists
-            ValidateHelper.NotNullOrWhiteSpace(result, Provider, AzureFileProviderConfigurationNames.CreateContainerIfNotExists, keyValuePairs[AzureFileProviderConfigurationNames.CreateContainerIfNotExists]);
+            ValidateHelper.NotNullOrWhiteSpace(result, Provider, AzureFileProviderConfigurationNames.CreateContainerIfNotExists, values.FindValue(AzureFileProviderConfigurationNames.CreateContainerIfNotExists));
 
             return result;
         }

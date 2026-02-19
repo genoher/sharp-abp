@@ -8,7 +8,7 @@ namespace SharpAbp.Abp.MassTransit.Kafka
 {
     public class AbpMassTransitKafkaOptions
     {
-        public string Server { get; set; }
+        public string? Server { get; set; }
 
         /// <summary>
         /// UseSSL
@@ -18,12 +18,12 @@ namespace SharpAbp.Abp.MassTransit.Kafka
         /// <summary>
         /// GroupId, default: SharpAbp
         /// </summary>
-        public string DefaultGroupId { get; set; } = "SharpAbp";
+        public string? DefaultGroupId { get; set; } = "SharpAbp";
 
         /// <summary>
         /// ClientId, default: rdkafka
         /// </summary>
-        public string DefaultClientId { get; set; } = "rdkafka";
+        public string? DefaultClientId { get; set; } = "rdkafka";
 
         /// <summary>
         /// ConcurrentMessageLimit, default: 1
@@ -106,9 +106,9 @@ namespace SharpAbp.Abp.MassTransit.Kafka
         /// </summary>
         public TimeSpan DefaultReconnectBackoffMax { get; set; } = TimeSpan.FromMilliseconds(100);
 
-        public Action<IKafkaSslConfigurator> ConfigureSsl { get; set; }
-        public Func<string, string, string> DefaultTopicFormatFunc { get; set; }
-        public Action<IKafkaTopicReceiveEndpointConfigurator> DefaultReceiveEndpointConfigure { get; set; }
+        public Action<IKafkaSslConfigurator>? ConfigureSsl { get; set; }
+        public Func<string?, string, string>? DefaultTopicFormatFunc { get; set; }
+        public Action<IKafkaTopicReceiveEndpointConfigurator>? DefaultReceiveEndpointConfigure { get; set; }
 
         public List<Action<IRiderRegistrationConfigurator>> RiderPreConfigures { get; set; }
         public List<Action<IRiderRegistrationConfigurator>> RiderConfigures { get; set; }
@@ -124,16 +124,16 @@ namespace SharpAbp.Abp.MassTransit.Kafka
         public AbpMassTransitKafkaOptions()
         {
 
-            RiderPreConfigures = new List<Action<IRiderRegistrationConfigurator>>();
-            RiderConfigures = new List<Action<IRiderRegistrationConfigurator>>();
-            RiderPostConfigures = new List<Action<IRiderRegistrationConfigurator>>();
+            RiderPreConfigures = [];
+            RiderConfigures = [];
+            RiderPostConfigures = [];
 
-            KafkaPreConfigures = new List<Action<IRiderRegistrationContext, IKafkaFactoryConfigurator>>();
-            KafkaConfigures = new List<Action<IRiderRegistrationContext, IKafkaFactoryConfigurator>>();
-            KafkaPostConfigures = new List<Action<IRiderRegistrationContext, IKafkaFactoryConfigurator>>();
+            KafkaPreConfigures = [];
+            KafkaConfigures = [];
+            KafkaPostConfigures = [];
 
-            Producers = new List<KafkaProducerConfiguration>();
-            Consumers = new List<KafkaConsumerConfiguration>();
+            Producers = [];
+            Consumers = [];
         }
 
         public AbpMassTransitKafkaOptions PreConfigure(IConfiguration configuration)

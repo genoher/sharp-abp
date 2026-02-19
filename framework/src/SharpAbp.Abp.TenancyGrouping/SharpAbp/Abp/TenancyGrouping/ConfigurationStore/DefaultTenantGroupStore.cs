@@ -1,7 +1,8 @@
-﻿using Microsoft.Extensions.Options;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
 using Volo.Abp.DependencyInjection;
 
 namespace SharpAbp.Abp.TenancyGrouping.ConfigurationStore
@@ -15,35 +16,39 @@ namespace SharpAbp.Abp.TenancyGrouping.ConfigurationStore
             _options = options.CurrentValue;
         }
 
-        public Task<TenantGroupConfiguration> FindAsync(string name)
+        public Task<TenantGroupConfiguration?> FindAsync(string normalizedName)
         {
-            return Task.FromResult(Find(name));
+            return Task.FromResult(Find(normalizedName));
         }
 
-        public Task<TenantGroupConfiguration> FindAsync(Guid id)
+        public Task<TenantGroupConfiguration?> FindAsync(Guid id)
         {
             return Task.FromResult(Find(id));
         }
 
-        public Task<TenantGroupConfiguration> FindByTenantIdAsync(Guid tenantId)
+        public Task<TenantGroupConfiguration?> FindByTenantIdAsync(Guid tenantId)
         {
             return Task.FromResult(FindByTenantId(tenantId));
         }
 
-        public TenantGroupConfiguration Find(string name)
+        public Task<IReadOnlyList<TenantGroupConfiguration>> GetListAsync(bool includeDetails = false)
         {
-            return _options.TenantGroups?.FirstOrDefault(t => t.Name == name);
+            return Task.FromResult<IReadOnlyList<TenantGroupConfiguration>>(_options.Groups);
         }
 
-        public TenantGroupConfiguration Find(Guid id)
+        public TenantGroupConfiguration? Find(string normalizedName)
         {
-            return _options.TenantGroups?.FirstOrDefault(t => t.Id == id);
+            return _options.Groups.FirstOrDefault(t => t.NormalizedName == normalizedName);
         }
 
-        public TenantGroupConfiguration FindByTenantId(Guid tenantId)
+        public TenantGroupConfiguration? Find(Guid id)
         {
-            return _options.TenantGroups?.FirstOrDefault(t => t.Tenants.Contains(tenantId));
+            return _options.Groups.FirstOrDefault(t => t.Id == id);
         }
 
+        public TenantGroupConfiguration? FindByTenantId(Guid tenantId)
+        {
+            return _options.Groups.FirstOrDefault(t => t.Tenants.Contains(tenantId));
+        }
     }
 }

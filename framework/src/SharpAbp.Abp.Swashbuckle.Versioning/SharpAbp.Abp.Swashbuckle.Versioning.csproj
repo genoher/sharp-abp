@@ -5,6 +5,8 @@
 
 	<PropertyGroup>
 		<TargetFramework>$(NetCoreFx)</TargetFramework>
+		<Nullable>enable</Nullable>
+		<WarningsAsErrors>Nullable</WarningsAsErrors>
 		<AssemblyName>SharpAbp.Abp.Swashbuckle.Versioning</AssemblyName>
 		<PackageId>SharpAbp.Abp.Swashbuckle.Versioning</PackageId>
 		<AssetTargetFallback>$(AssetTargetFallback);portable-net45+win8+wp8+wpa81;</AssetTargetFallback>
@@ -17,7 +19,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Volo.Abp.Swashbuckle" />
-		<PackageReference Include="Microsoft.AspNetCore.Mvc.Versioning.ApiExplorer" />
+		<PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" />
 	</ItemGroup>
 
 </Project>

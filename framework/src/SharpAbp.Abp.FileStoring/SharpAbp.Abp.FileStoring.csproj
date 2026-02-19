@@ -5,6 +5,8 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>$(ProjectFrameworks)</TargetFrameworks>
+		<Nullable>enable</Nullable>
+		<WarningsAsErrors>Nullable</WarningsAsErrors>
 		<AssemblyName>SharpAbp.Abp.FileStoring</AssemblyName>
 		<PackageId>SharpAbp.Abp.FileStoring</PackageId>
 		<AssetTargetFallback>$(AssetTargetFallback);portable-net45+win8+wp8+wpa81;</AssetTargetFallback>
@@ -21,6 +23,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\SharpAbp.Abp.Core\SharpAbp.Abp.Core.csproj" />
 		<ProjectReference Include="..\SharpAbp.Abp.FileStoring.Abstractions\SharpAbp.Abp.FileStoring.Abstractions.csproj" />
 	</ItemGroup>
 

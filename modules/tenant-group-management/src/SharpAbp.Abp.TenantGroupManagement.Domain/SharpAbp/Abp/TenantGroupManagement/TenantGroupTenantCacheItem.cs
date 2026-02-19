@@ -1,31 +1,47 @@
-﻿using System;
-using Volo.Abp;
+﻿﻿using System;
 
 namespace SharpAbp.Abp.TenantGroupManagement
 {
+    /// <summary>
+    /// Represents a cache item that stores the relationship between a tenant and its associated tenant group.
+    /// This class is used for caching tenant-to-tenant-group mappings to improve performance.
+    /// </summary>
     public class TenantGroupTenantCacheItem
     {
-        private const string CacheKeyFormat = "i:{0},g:{1}";
-        public Guid? TenantId { get; set; }
-        public Guid? TenantGroupId { get; set; }
-
-        public TenantGroupTenantCacheItem(Guid? tenantId, Guid? tenantGroupId)
+        /// <summary>
+        /// The format string used to generate cache keys for tenant-to-tenant-group mappings.
+        /// </summary>
+        private const string CacheKeyFormat = "t:{0}";
+        
+        /// <summary>
+        /// Gets or sets the identifier of the tenant.
+        /// </summary>
+        public Guid TenantId { get; set; }
+        
+        /// <summary>
+        /// Gets or sets the identifier of the tenant group that contains this tenant.
+        /// </summary>
+        public Guid TenantGroupId { get; set; }
+        
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TenantGroupTenantCacheItem"/> class.
+        /// </summary>
+        /// <param name="tenantId">The identifier of the tenant.</param>
+        /// <param name="tenantGroupId">The identifier of the tenant group.</param>
+        public TenantGroupTenantCacheItem(Guid tenantId, Guid tenantGroupId)
         {
             TenantId = tenantId;
             TenantGroupId = tenantGroupId;
         }
-
-        public static string CalculateCacheKey(Guid? tenantId, Guid? tenantGroupId)
+        
+        /// <summary>
+        /// Calculates the cache key for a given tenant identifier.
+        /// </summary>
+        /// <param name="tenantId">The identifier of the tenant for which to generate the cache key.</param>
+        /// <returns>A formatted cache key string that can be used to store or retrieve this tenant's cache item.</returns>
+        public static string CalculateCacheKey(Guid tenantId)
         {
-            if (tenantId == null && tenantGroupId == null)
-            {
-                throw new AbpException("Both tenantId and tenantGroupId be invalid.");
-            }
-
-            return string.Format(CacheKeyFormat,
-                tenantId?.ToString() ?? "null",
-                tenantGroupId?.ToString() ?? "null");
+            return string.Format(CacheKeyFormat, tenantId);
         }
-
     }
 }

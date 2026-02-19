@@ -1,11 +1,15 @@
-﻿using Microsoft.Extensions.Options;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.Options;
+using SharpAbp.Abp.Core.Extensions;
+using SharpAbp.Abp.Validation;
+using Volo.Abp;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Validation;
 
 namespace SharpAbp.Abp.FileStoring.FileSystem
 {
+    [ExposeKeyedService<IFileProviderValuesValidator>(FileSystemFileProviderConfigurationNames.ProviderName)]
     public class FileSystemFileProviderValuesValidator : BaseFileProviderValuesValidator, ITransientDependency
     {
         public override string Provider => FileSystemFileProviderConfigurationNames.ProviderName;
@@ -14,10 +18,10 @@ namespace SharpAbp.Abp.FileStoring.FileSystem
         {
         }
 
-        public override IAbpValidationResult Validate(Dictionary<string, string> keyValuePairs)
+        public override IAbpValidationResult Validate(List<NameValue> values)
         {
             var result = new AbpValidationResult();
-            ValidateBasic(result, keyValuePairs);
+            ValidateBasic(result, values);
 
             if (result.Errors.Any())
             {
@@ -25,13 +29,13 @@ namespace SharpAbp.Abp.FileStoring.FileSystem
             }
 
             //BasePath
-            ValidateHelper.NotNullOrWhiteSpace(result, Provider, FileSystemFileProviderConfigurationNames.BasePath, keyValuePairs[FileSystemFileProviderConfigurationNames.BasePath]);
+            ValidateHelper.NotNullOrWhiteSpace(result, Provider, FileSystemFileProviderConfigurationNames.BasePath, values.FindValue(FileSystemFileProviderConfigurationNames.BasePath));
 
             //AppendContainerNameToBasePath
-            ValidateHelper.ShouldBool(result, Provider, FileSystemFileProviderConfigurationNames.AppendContainerNameToBasePath, keyValuePairs[FileSystemFileProviderConfigurationNames.AppendContainerNameToBasePath]);
+            ValidateHelper.ShouldBool(result, Provider, FileSystemFileProviderConfigurationNames.AppendContainerNameToBasePath, values.FindValue(FileSystemFileProviderConfigurationNames.AppendContainerNameToBasePath));
 
             //HttpServer
-            //ValidateHelper.NotNullOrWhiteSpace(result, Provider, FileSystemFileProviderConfigurationNames.HttpServer, keyValuePairs[FileSystemFileProviderConfigurationNames.HttpServer]);
+            //ValidateHelper.NotNullOrWhiteSpace(result, Provider, FileSystemFileProviderConfigurationNames.HttpServer, values.FindValue[FileSystemFileProviderConfigurationNames.HttpServer]);
 
             return result;
         }

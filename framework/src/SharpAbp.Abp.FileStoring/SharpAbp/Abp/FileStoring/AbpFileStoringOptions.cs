@@ -1,6 +1,6 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System.Collections.Generic;
 using Volo.Abp;
 using Volo.Abp.Modularity;
 using Volo.Abp.Reflection;
@@ -28,38 +28,37 @@ namespace SharpAbp.Abp.FileStoring
             {
                 foreach (var entryKv in entries)
                 {
-                    var fileProviderConfiguration = abstractionsOptions.Providers.GetConfiguration(entryKv.Value.Provider);
+                    var entry = entryKv.Value!;
+
+                    var fileProviderConfiguration = abstractionsOptions.Providers.GetConfiguration(entry.Provider!);
                     if (fileProviderConfiguration == null)
                     {
-                        throw new AbpException($"Could not find any provider configuration for '{entryKv.Key}' container, provider:'{entryKv.Value.Provider}'");
+                        throw new AbpException($"Could not find any provider configuration for '{entryKv.Key}' container, provider:'{entry.Provider}'");
                     }
 
                     Containers.Configure(entryKv.Key, c =>
                     {
                         c.Provider = fileProviderConfiguration.Provider;
-                        c.IsMultiTenant = entryKv.Value?.IsMultiTenant ?? false;
-                        c.EnableAutoMultiPartUpload = entryKv.Value?.EnableAutoMultiPartUpload ?? false;
-                        c.MultiPartUploadMinFileSize = entryKv.Value?.MultiPartUploadMinFileSize ?? 1024 * 1024 * 100;
-                        c.MultiPartUploadShardingSize = entryKv.Value?.MultiPartUploadShardingSize ?? 1024 * 1024 * 3;
-                        c.HttpAccess = entryKv.Value?.HttpAccess ?? true;
+                        c.IsMultiTenant = entry.IsMultiTenant;
+                        c.EnableAutoMultiPartUpload = entry.EnableAutoMultiPartUpload;
+                        c.MultiPartUploadMinFileSize = entry.MultiPartUploadMinFileSize;
+                        c.MultiPartUploadShardingSize = entry.MultiPartUploadShardingSize;
+                        c.HttpAccess = entry.HttpAccess;
 
                         foreach (var defaultNamingNormalizer in fileProviderConfiguration.DefaultNamingNormalizers)
                         {
                             c.NamingNormalizers.Add(defaultNamingNormalizer);
                         }
 
-                        var itemDict = fileProviderConfiguration.GetItems();
-
-                        foreach (var itemKeyValuePair in itemDict)
+                        var itemPairs = fileProviderConfiguration.GetItems();
+                        foreach (var key in itemPairs.Keys)
                         {
-                            entryKv.Value.Properties.TryGetValue(itemKeyValuePair.Key, out string value);
-
-                            var item = itemKeyValuePair.Value;
-
-                            var realValue = TypeHelper.ConvertFromString(item.ValueType, value);
-                            c.SetConfiguration(itemKeyValuePair.Key, realValue);
+                            if (entry.Properties.ContainsKey(key) && itemPairs[key] != null)
+                            {
+                                var o = TypeHelper.ConvertFromString(itemPairs[key].ValueType!, entry.Properties[key]);
+                                c.SetConfiguration(key, o);
+                            }
                         }
-
                     });
 
                 }

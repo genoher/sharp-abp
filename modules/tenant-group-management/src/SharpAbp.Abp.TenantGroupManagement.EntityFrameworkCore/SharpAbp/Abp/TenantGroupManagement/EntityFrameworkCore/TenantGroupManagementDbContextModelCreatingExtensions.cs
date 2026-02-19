@@ -1,5 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
-using System;
+﻿using System;
+using Microsoft.EntityFrameworkCore;
 using Volo.Abp;
 using Volo.Abp.EntityFrameworkCore.Modeling;
 
@@ -28,6 +28,8 @@ namespace SharpAbp.Abp.TenantGroupManagement.EntityFrameworkCore
 
                 b.Property(p => p.Name).IsRequired().HasMaxLength(TenantGroupConsts.MaxNameLength);
 
+                b.Property(t => t.NormalizedName).IsRequired().HasMaxLength(TenantGroupConsts.MaxNormalizedNameLength);
+
                 b.HasIndex(p => new { p.Name }).IsUnique();
 
                 b.HasMany(p => p.ConnectionStrings).WithOne().HasForeignKey(uc => uc.TenantGroupId).IsRequired();
@@ -48,6 +50,8 @@ namespace SharpAbp.Abp.TenantGroupManagement.EntityFrameworkCore
                 b.Property(p => p.TenantId).IsRequired();
 
                 b.HasIndex(p => new { p.TenantGroupId, p.TenantId }).IsUnique();
+
+                b.ApplyObjectExtensionMappings();
             });
 
             builder.Entity<TenantGroupConnectionString>(b =>
@@ -65,7 +69,7 @@ namespace SharpAbp.Abp.TenantGroupManagement.EntityFrameworkCore
                 b.ApplyObjectExtensionMappings();
             });
 
-
+            builder.TryConfigureObjectExtensions<TenantGroupManagementDbContext>();
         }
     }
 }
